@@ -1,0 +1,6 @@
+numpy
+scipy
+scikit-image
+PyWavelets
+tqdm
+scikit-learn
