@@ -54,19 +54,19 @@ appended.
 
 Arguments for `pystripe` CLI:
 
-* **--input**: (str) path to a single image or a directory with images to filter
+* **--input, -i**: (str) path to a single image or a directory with images to filter
 * **--output, -o**: (str, optional) path to a single image or a directory to write to.
 Parent directories will be created as needed. Note that setting the output to the input
 will overwrite the original image(s). Default is either to write the result from `my/img/input.tif` to
 `my/img/input_destriped.tif` or results from `my/folder/` to `my/folder_destriped/`. 
-* **--sigma**: (float) bandwidth of the stripe filter
-* **--level**: (int, optional) number of wavelet decomposition levels. Default is the maximum
+* **--sigma, -s**: (float) bandwidth of the stripe filter
+* **--level, -l**: (int, optional) number of wavelet decomposition levels. Default is the maximum
 possible given the image shape
-* **--wavelet**: (str, optional) name of the mother wavelet. Default is `'db2'`. 
+* **--wavelet, -w**: (str, optional) name of the mother wavelet. Default is `'db2'`. 
 See [PyWavelets](https://pywavelets.readthedocs.io/en/latest/) for more options.
-* **--workers**: (int, optional) number of cpu workers to use in batch processing. Default is cpu_count()
+* **--workers, -n**: (int, optional) number of cpu workers to use in batch processing. Default is cpu_count()
 * **--chunks**: (int, optional) number of images each worker processes at a time. Default is 1
-* **--compression**: (int, optional) compression level (0-9) for writing tiffs. Default is 1
+* **--compression, -c**: (int, optional) compression level (0-9) for writing tiffs. Default is 1
 
 ## Batch script
 
