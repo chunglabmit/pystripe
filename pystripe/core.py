@@ -27,7 +27,7 @@ def _get_extension(path):
         file extension of provided path
 
     """
-    return os.path.splitext(path)[1]
+    return Path(path).suffix
 
 
 def imread(path):
@@ -214,6 +214,47 @@ def gaussian_filter(shape, sigma):
     return np.broadcast_to(g, shape)
 
 
+def hist_match(source, template):
+    """Adjust the pixel values of a grayscale image such that its histogram matches that of a target image
+
+    Parameters
+    ----------
+    source: ndarray
+        Image to transform; the histogram is computed over the flattened array
+    template: ndarray
+        Template image; can have different dimensions to source
+    Returns
+    -------
+    matched: ndarray
+        The transformed output image
+        
+    """
+
+    oldshape = source.shape
+    source = source.ravel()
+    template = template.ravel()
+
+    # get the set of unique pixel values and their corresponding indices and
+    # counts
+    s_values, bin_idx, s_counts = np.unique(source, return_inverse=True,
+                                            return_counts=True)
+    t_values, t_counts = np.unique(template, return_counts=True)
+
+    # take the cumsum of the counts and normalize by the number of pixels to
+    # get the empirical cumulative distribution functions for the source and
+    # template images (maps pixel value --> quantile)
+    s_quantiles = np.cumsum(s_counts).astype(np.float64)
+    s_quantiles /= s_quantiles[-1]
+    t_quantiles = np.cumsum(t_counts).astype(np.float64)
+    t_quantiles /= t_quantiles[-1]
+
+    # interpolate linearly to find the pixel values in the template image
+    # that correspond most closely to the quantiles in the source image
+    interp_t_values = np.interp(s_quantiles, t_quantiles, t_values)
+
+    return interp_t_values[bin_idx].reshape(oldshape)
+
+
 def filter_streaks(img, sigma, level=0, wavelet='db2'):
     """Filter horizontal streaks using wavelet-FFT filter
 
@@ -249,11 +290,32 @@ def filter_streaks(img, sigma, level=0, wavelet='db2'):
         ch_filt = ifft(fch_filt)
         coeffs_filt.append((ch_filt, cv, cd))
 
-    fimg = waverec(coeffs_filt, wavelet).astype(img.dtype)
-    return fimg
+    fimg = waverec(coeffs_filt, wavelet)
+
+    scaled_fimg = hist_match(fimg, img)
+    np.clip(scaled_fimg, np.iinfo(img.dtype).min, np.iinfo(img.dtype).max, out=scaled_fimg)
+    return scaled_fimg.astype(img.dtype)
 
 
 def read_filter_save(input_path, output_path, sigma, level=0, wavelet='db2', compression=1):
+    """Convenience wrapper around filter streaks. Takes in a path to an image rather than an image array.
+    
+    Parameters
+    ----------
+    input_path : Path
+        path to the image to filter
+    output_path : Path
+        path to write the result
+    sigma : float
+        bandwidth of the stripe filter
+    level : int
+        number of wavelet levels to use
+    wavelet : str
+        name of the mother wavelet
+    compression : int
+        compression level for writing tiffs
+
+    """
     img = imread(str(input_path))
     fimg = filter_streaks(img, sigma, level=level, wavelet=wavelet)
     if not output_path.parent.exists():
@@ -262,6 +324,14 @@ def read_filter_save(input_path, output_path, sigma, level=0, wavelet='db2', com
 
 
 def _read_filter_save(input_dict):
+    """Same as `read_filter_save' but with a single input dictionary. Used for pool.imap() in batch_filter
+    
+    Parameters
+    ----------
+    input_dict : dict
+        input dictionary with arguments for `read_filter_save`.
+
+    """
     input_path = input_dict['input_path']
     output_path = input_dict['output_path']
     sigma = input_dict['sigma']
@@ -272,6 +342,19 @@ def _read_filter_save(input_dict):
 
 
 def _find_all_images(input_path):
+    """Find all images with a supported file extension within a directory and all its subdirectories.
+    
+    Parameters
+    ----------
+    input_path : str
+        root directory to start image search
+
+    Returns
+    -------
+    img_paths : list
+        a list of Path objects for all found images
+
+    """
     input_path = Path(input_path)
     assert input_path.is_dir()
     img_paths = []
@@ -285,6 +368,28 @@ def _find_all_images(input_path):
 
 
 def batch_filter(input_path, output_path, workers, chunks, sigma, level=0, wavelet='db2', compression=1):
+    """Applies `streak_filter` to all images in `input_path` and write the results to `output_path`.
+    
+    Parameters
+    ----------
+    input_path : Path
+        root directory to search for images to filter
+    output_path : Path
+        root directory for writing results
+    workers : int
+        number of CPU workers to use
+    chunks : int
+        number of images for each CPU to process at a time
+    sigma : float
+        bandwidth of the stripe filter
+    level : int
+        number of wavelet levels to use
+    wavelet : str
+        name of the mother wavelet
+    compression : int
+        compression level to use in tiff writing
+
+    """
     if workers == 0:
         workers = multiprocessing.cpu_count()
 
@@ -310,6 +415,7 @@ def batch_filter(input_path, output_path, workers, chunks, sigma, level=0, wavel
 def _parse_args():
     parser = argparse.ArgumentParser(description="Streak elimination using wavelet and FFT filtering")
     parser.add_argument("--input", "-i", help="Path to input image or path", type=str, required=True)
+    parser.add_argument("--output", "-o", help="Path to output image or path", type=str, default='')
     parser.add_argument("--sigma", "-s", help="Bandwidth (larger for more filtering)", type=float, required=True)
     parser.add_argument("--level", "-l", help="Number of decomposition levels", type=int, default=0)
     parser.add_argument("--wavelet", "-w", help="Name of the mother wavelet", type=str, default='db2')
@@ -327,7 +433,11 @@ def main():
         if input_path.suffix not in supported_extensions:
             print('Input file was found, but is not supported. Exiting...')
             return
-        output_path = Path(input_path.parent).joinpath(input_path.stem+'_destriped'+input_path.suffix)
+        if args.output == '':
+            output_path = Path(input_path.parent).joinpath(input_path.stem+'_destriped'+input_path.suffix)
+        else:
+            output_path = Path(args.output)
+            assert output_path.suffix in supported_extensions
         read_filter_save(input_path,
                          output_path,
                          sigma=args.sigma,
@@ -335,7 +445,11 @@ def main():
                          wavelet=args.wavelet,
                          compression=args.compression)
     elif input_path.is_dir():  # batch processing
-        output_path = Path(input_path.parent).joinpath(str(input_path)+'_destriped')
+        if args.output == '':
+            output_path = Path(input_path.parent).joinpath(str(input_path)+'_destriped')
+        else:
+            output_path = Path(args.output)
+            assert output_path.suffix == ''
         batch_filter(input_path,
                      output_path,
                      workers=args.workers,
