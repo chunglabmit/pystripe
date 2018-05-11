@@ -17,6 +17,7 @@ setup(
         "tifffile",
         "PyWavelets",
         "tqdm",
+        "tsv"
     ],
     dependency_links=[
         'http://github.com/chunglabmit/tsv/tarball/master#egg=tsv-0.1.0'
