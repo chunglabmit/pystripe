@@ -38,8 +38,6 @@ If using the provided Windows batch scripts, install within a conda environment
 > pip install https://github.com/chunglabmit/pystripe/archive/master.zip
 ```
 
-On Linux, the --allow-external flag may be unnecessary. Including `tsv` allows `.raw` support.
-
 ## Command-line interface (CLI)
 
 The following application is available from the command-line
