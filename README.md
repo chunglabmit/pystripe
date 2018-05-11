@@ -11,12 +11,12 @@ import pystripe
 fimg = pystripe.filter_streaks(img, sigma=4.0, level=7, wavelet='db2')
 
 # batch process images in a directory (and subdirectories)
-fimg = pystripe.batch_filter(input_path, 
-                             output_path,
-                             workers=8, 
-                             sigma=4.0, 
-                             level=7, 
-                             wavelet='db2')
+pystripe.batch_filter(input_path, 
+                      output_path,
+                      workers=8, 
+                      sigma=4.0, 
+                      level=7, 
+                      wavelet='db2')
 ```
 
 A typical result looks like this:
@@ -28,14 +28,14 @@ A typical result looks like this:
 Installation can be done using `pip`, e.g.
 
 ```bash
-> pip install https://github.com/chunglabmit/pystripe/archive/master.zip --process-dependency-links --allow-external tsv
+> pip install https://github.com/chunglabmit/pystripe/archive/master.zip
 ```
 
 If using the provided Windows batch scripts, install within a conda environment
 ```bash
-> conda create -n pystripe pip
+> conda create -n pystripe python==3.6
 > activate pystripe
-> pip install https://github.com/chunglabmit/pystripe/archive/master.zip --process-dependency-links --allow-external tsv
+> pip install https://github.com/chunglabmit/pystripe/archive/master.zip
 ```
 
 ## Command-line interface (CLI)
@@ -72,8 +72,7 @@ See [PyWavelets](https://pywavelets.readthedocs.io/en/latest/) for more options.
 
 The `scripts/` directory contains a Windows batch script for running `pystripe` within the
 current working directory. In order to use the script as is, pystripe must be installed within a conda environment
-named "pystripe" (see Installation). Also, the script itself **cannot** be named `pystripe.bat`
-because Windows will assume the script is calling itself rather than the `pystripe.exe` on the
+named "pystripe" (see Installation). Also, the script itself **cannot** be named `pystripe.bat` because Windows will assume the script is calling itself rather than the `pystripe.exe` on the
 `PATH`. Feel free to adjust the parameters or add any of the additional arguments mentioned above.
 
 ## Authors

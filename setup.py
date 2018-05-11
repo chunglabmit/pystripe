@@ -17,10 +17,7 @@ setup(
         "tifffile",
         "PyWavelets",
         "tqdm",
-        "tsv==0.1.0"
-    ],
-    dependency_links=[
-        'http://github.com/chunglabmit/tsv/tarball/master#egg=tsv-0.1.0'
+        "pathlib2"
     ],
     author="Kwanghun Chung Lab",
     packages=["pystripe"],

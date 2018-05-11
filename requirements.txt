@@ -3,4 +3,4 @@ scipy
 tifffile
 PyWavelets
 tqdm
-https://github.com/chunglabmit/tsv/archive/master.zip
+pathlib2

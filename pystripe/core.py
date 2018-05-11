@@ -4,10 +4,10 @@ import os
 import numpy as np
 from scipy import fftpack
 import tifffile
-from tsv import raw
 import pywt
 import multiprocessing
 import tqdm
+from pystripe import raw
 
 
 supported_extensions = ['.tif', '.tiff', '.raw']
