@@ -2,7 +2,7 @@ import numpy as np
 import unittest
 import os
 import tempfile
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 from pystripe import core
 
 
@@ -24,12 +24,12 @@ class TestWaverec(unittest.TestCase):
         self.assertTrue(np.allclose(img, recon))
 
 
-def plot_fft(data, fdata):
-    plt.subplot(121)
-    plt.imshow(data)
-    plt.subplot(122)
-    plt.imshow(np.sqrt(np.real(fdata) ** 2 + np.imag(fdata) ** 2))
-    plt.show()
+# def plot_fft(data, fdata):
+#     plt.subplot(121)
+#     plt.imshow(data)
+#     plt.subplot(122)
+#     plt.imshow(np.sqrt(np.real(fdata) ** 2 + np.imag(fdata) ** 2))
+#     plt.show()
 
 
 class TestFFT(unittest.TestCase):
