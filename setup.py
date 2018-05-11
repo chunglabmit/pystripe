@@ -17,7 +17,7 @@ setup(
         "tifffile",
         "PyWavelets",
         "tqdm",
-        "tsv"
+        "https://github.com/chunglabmit/tsv/archive/master.zip"
     ],
     author="Kwanghun Chung Lab",
     packages=["pystripe"],

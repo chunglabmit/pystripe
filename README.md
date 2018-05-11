@@ -30,6 +30,14 @@ Installation can be done using `pip`, e.g.
 ```bash
 > pip install https://github.com/chunglabmit/pystripe/archive/master.zip
 ```
+
+If using the provided Windows batch scripts, install within a conda environment
+```bash
+> conda create -n pystripe pip
+> activate pystripe
+> pip install https://github.com/chunglabmit/pystripe/archive/master.zip
+```
+
 ## Command-line interface (CLI)
 
 The following application is available from the command-line
@@ -58,6 +66,9 @@ Arguments for `pystripe` CLI:
 
 The `scripts/` directory contains batch scripts for running `pystripe` within the
 current working directory. The parameters in these scripts can be adjusted as needed.
+
+In order to use these scripts, pystripe must be installed within a conda environment
+named "pystripe".
 
 ## Authors
 Phathom is maintained by members of the [Kwanghun Chung Lab](http://www.chunglab.org/) at MIT.
