@@ -14,17 +14,16 @@ setup(
     install_requires=[
         "numpy",
         "scipy",
-        "scikit-image",
+        "tifffile",
         "PyWavelets",
         "tqdm",
-        "scikit-learn"
+        "tsv"
     ],
     author="Kwanghun Chung Lab",
     packages=["pystripe"],
-    # entry_points={ 'console_scripts': [
-    #     'phathom-segmentation=phathom.segmentation:main',
-    #     'phathom-score-centroids=phathom.score.main'
-    # ]},
+    entry_points={ 'console_scripts': [
+        'pystripe=pystripe.core:main',
+    ]},
     url="https://github.com/chunglabmit/pystripe",
     license="MIT",
     classifiers=[

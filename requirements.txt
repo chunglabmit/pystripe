@@ -1,6 +1,6 @@
 numpy
 scipy
-scikit-image
+tifffile
 PyWavelets
 tqdm
-scikit-learn
+https://github.com/chunglabmit/tsv/archive/master.zip
