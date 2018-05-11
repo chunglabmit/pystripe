@@ -285,8 +285,10 @@ def _find_all_images(input_path):
 
 
 def batch_filter(input_path, output_path, workers, chunks, sigma, level=0, wavelet='db2', compression=1):
-    img_paths = _find_all_images(input_path)
+    if workers == 0:
+        workers = multiprocessing.cpu_count()
 
+    img_paths = _find_all_images(input_path)
     args = []
     for p in img_paths:
         rel_path = p.relative_to(input_path)
@@ -311,7 +313,7 @@ def _parse_args():
     parser.add_argument("--sigma", "-s", help="Bandwidth (larger for more filtering)", type=float, required=True)
     parser.add_argument("--level", "-l", help="Number of decomposition levels", type=int, default=0)
     parser.add_argument("--wavelet", "-w", help="Name of the mother wavelet", type=str, default='db2')
-    parser.add_argument("--workers", "-n", help="Number of workers (for batch processing)", type=int, default=1)
+    parser.add_argument("--workers", "-n", help="Number of workers (for batch processing)", type=int, default=0)
     parser.add_argument("--chunks", help="Chunk size (for batch processing)", type=int, default=1)
     parser.add_argument("--compression", "-c", help="Compression level for written tiffs", type=int, default=1)
     args = parser.parse_args()

@@ -58,7 +58,7 @@ Arguments for `pystripe` CLI:
 * **--sigma**: (float) bandwidth of the stripe filter
 * **--level**: (int) number of wavelet decomposition levels
 * **--wavelet**: (str) name of the mother wavelet
-* **--workers**: (int) number of cpu workers to use in batch processing
+* **--workers**: (int) number of cpu workers to use in batch processing. Default is cpu_count()
 * **--chunks**: (int) number of images each worker processes at a time
 * **--compression**: (int) compression level (0-9) for writing tiffs
 
