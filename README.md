@@ -21,7 +21,7 @@ pystripe.batch_filter(input_path,
 
 A typical result looks like this:
 
-![Image](./demo/result.png?raw=true)
+![Image](./demo/result.jpg?raw=true)
 
 ## Installation
 
