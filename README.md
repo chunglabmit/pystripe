@@ -28,14 +28,14 @@ A typical result looks like this:
 Installation can be done using `pip`, e.g.
 
 ```bash
-> pip install https://github.com/chunglabmit/pystripe/archive/master.zip --process-dependency-links
+> pip install https://github.com/chunglabmit/pystripe/archive/master.zip --process-dependency-links --allow-external tsv
 ```
 
 If using the provided Windows batch scripts, install within a conda environment
 ```bash
 > conda create -n pystripe pip
 > activate pystripe
-> pip install https://github.com/chunglabmit/pystripe/archive/master.zip --process-dependency-links
+> pip install https://github.com/chunglabmit/pystripe/archive/master.zip --process-dependency-links --allow-external tsv
 ```
 
 ## Command-line interface (CLI)

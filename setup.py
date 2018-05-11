@@ -21,7 +21,6 @@ setup(
     ],
     dependency_links=[
         'http://github.com/chunglabmit/tsv/tarball/master#egg=tsv-0.1.0'
-        # 'https://github.com/chunglabmit/tsv/archive/master.zip'
     ],
     author="Kwanghun Chung Lab",
     packages=["pystripe"],
