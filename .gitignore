@@ -48,3 +48,7 @@ phathom.egg-info/
 # Local build of Documentation #
 ################################
 _build/
+
+# setup.py develop #
+####################
+pystripe.egg-info/
