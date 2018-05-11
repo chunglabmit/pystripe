@@ -53,7 +53,7 @@ def imread(path):
     return img
 
 
-def imsave(path, img):
+def imsave(path, img, compression=1):
     """Save an array as a tiff or raw image
     
     The file format will be inferred from the file extension in `path`
@@ -64,15 +64,17 @@ def imsave(path, img):
         path to tiff or raw image
     img : ndarray
         image as a numpy array
+    compression : int
+        compression level for tiff writing
 
     """
     extension = _get_extension(path)
     if extension == '.raw':
         # TODO: get raw writing to work
         # raw.raw_imsave(path, img)
-        tifffile.imsave(os.path.splitext(path)[0]+'.tif', img)
+        tifffile.imsave(os.path.splitext(path)[0]+'.tif', img, compress=compression)
     elif extension == '.tif' or extension == '.tiff':
-        tifffile.imsave(path, img)
+        tifffile.imsave(path, img, compress=compression)
 
 
 def wavedec(img, wavelet, level=None):
@@ -250,12 +252,13 @@ def filter_streaks(img, sigma, level=0, wavelet='db2'):
     fimg = waverec(coeffs_filt, wavelet).astype(img.dtype)
     return fimg
 
-def read_filter_save(input_path, output_path, sigma, level=0, wavelet='db2'):
+
+def read_filter_save(input_path, output_path, sigma, level=0, wavelet='db2', compression=1):
     img = imread(str(input_path))
     fimg = filter_streaks(img, sigma, level=level, wavelet=wavelet)
     if not output_path.parent.exists():
         output_path.parent.mkdir(parents=True)
-    imsave(str(output_path), fimg)
+    imsave(str(output_path), fimg, compression=compression)
 
 
 def _read_filter_save(input_dict):
@@ -264,7 +267,8 @@ def _read_filter_save(input_dict):
     sigma = input_dict['sigma']
     level = input_dict['level']
     wavelet = input_dict['wavelet']
-    read_filter_save(input_path, output_path, sigma, level, wavelet)
+    compression = input_dict['compression']
+    read_filter_save(input_path, output_path, sigma, level, wavelet, compression)
 
 
 def _find_all_images(input_path):
@@ -280,7 +284,7 @@ def _find_all_images(input_path):
     return img_paths
 
 
-def batch_filter(input_path, output_path, workers, chunks, sigma, level=0, wavelet='db2'):
+def batch_filter(input_path, output_path, workers, chunks, sigma, level=0, wavelet='db2', compression=1):
     img_paths = _find_all_images(input_path)
 
     args = []
@@ -292,7 +296,8 @@ def batch_filter(input_path, output_path, workers, chunks, sigma, level=0, wavel
             'output_path': o,
             'sigma': sigma,
             'level': level,
-            'wavelet': wavelet
+            'wavelet': wavelet,
+            'compression': compression
         }
         args.append(arg_dict)
 
@@ -304,10 +309,11 @@ def _parse_args():
     parser = argparse.ArgumentParser(description="Streak elimination using wavelet and FFT filtering")
     parser.add_argument("--input", "-i", help="Path to input image or path", type=str, required=True)
     parser.add_argument("--sigma", "-s", help="Bandwidth (larger for more filtering)", type=float, required=True)
-    parser.add_argument("--wavelet", "-w", help="Name of the mother wavelet", type=str, default='db2')
     parser.add_argument("--level", "-l", help="Number of decomposition levels", type=int, default=0)
+    parser.add_argument("--wavelet", "-w", help="Name of the mother wavelet", type=str, default='db2')
     parser.add_argument("--workers", "-n", help="Number of workers (for batch processing)", type=int, default=1)
-    parser.add_argument("--chunks", "-c", help="Chunk size (for batch processing)", type=int, default=1)
+    parser.add_argument("--chunks", help="Chunk size (for batch processing)", type=int, default=1)
+    parser.add_argument("--compression", "-c", help="Compression level for written tiffs", type=int, default=1)
     args = parser.parse_args()
     return args
 
@@ -324,7 +330,8 @@ def main():
                          output_path,
                          sigma=args.sigma,
                          level=args.level,
-                         wavelet=args.wavelet)
+                         wavelet=args.wavelet,
+                         compression=args.compression)
     elif input_path.is_dir():  # batch processing
         output_path = Path(input_path.parent).joinpath(str(input_path)+'_destriped')
         batch_filter(input_path,
@@ -333,7 +340,8 @@ def main():
                      chunks=args.chunks,
                      sigma=args.sigma,
                      level=args.level,
-                     wavelet=args.wavelet)
+                     wavelet=args.wavelet,
+                     compression=args.compression)
     else:
         print('Cannot find input file or directory. Exiting...')
 
