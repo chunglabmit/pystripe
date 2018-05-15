@@ -298,7 +298,9 @@ def filter_streaks(img, sigma, level=0, wavelet='db2'):
 
 
 def read_filter_save(input_path, output_path, sigma, level=0, wavelet='db2', compression=1):
-    """Convenience wrapper around filter streaks. Takes in a path to an image rather than an image array.
+    """Convenience wrapper around filter streaks. Takes in a path to an image rather than an image array
+    
+    Note that the directory being written to must already exist before calling this function
     
     Parameters
     ----------
@@ -318,8 +320,6 @@ def read_filter_save(input_path, output_path, sigma, level=0, wavelet='db2', com
     """
     img = imread(str(input_path))
     fimg = filter_streaks(img, sigma, level=level, wavelet=wavelet)
-    if not output_path.parent.exists():
-        output_path.parent.mkdir(parents=True)
     imsave(str(output_path), fimg, compression=compression)
 
 
@@ -342,7 +342,7 @@ def _read_filter_save(input_dict):
 
 
 def _find_all_images(input_path):
-    """Find all images with a supported file extension within a directory and all its subdirectories.
+    """Find all images with a supported file extension within a directory and all its subdirectories
     
     Parameters
     ----------
@@ -398,6 +398,8 @@ def batch_filter(input_path, output_path, workers, chunks, sigma, level=0, wavel
     for p in img_paths:
         rel_path = p.relative_to(input_path)
         o = output_path.joinpath(rel_path)
+        if not o.parent.exists():
+            o.parent.mkdir(parents=True)
         arg_dict = {
             'input_path': p,
             'output_path': o,
