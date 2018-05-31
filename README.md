@@ -1,6 +1,6 @@
 # pystripe
 
-[![Travis CI Status](https://travis-ci.org/chunglabmit/pystripe.svg?branch=master)](https://travis-ci.org/chunglabmit/phathom)
+[![Travis CI Status](https://travis-ci.org/chunglabmit/pystripe.svg?branch=master)](https://travis-ci.org/chunglabmit/pystripe)
 
 An image processing package for removing streaks from SPIM images
 
