@@ -1,8 +1,10 @@
 import argparse
+from argparse import RawDescriptionHelpFormatter
 from pathlib import Path
 import os
 import numpy as np
-from scipy import fftpack
+from scipy import fftpack, ndimage
+from skimage.filters import threshold_otsu
 import tifffile
 import pywt
 import multiprocessing
@@ -136,12 +138,14 @@ def fft(data, axis=-1, shift=True):
 
     """
     fdata = fftpack.rfft(data, axis=axis)
+    # fdata = fftpack.rfft(fdata, axis=0)
     if shift:
         fdata = fftpack.fftshift(fdata)
     return fdata
 
 
 def ifft(fdata, axis=-1):
+    # fdata = fftpack.irfft(fdata, axis=0)
     return fftpack.irfft(fdata, axis=axis)
 
 
@@ -165,6 +169,14 @@ def fft2(data, shift=True):
     if shift:
         fdata = fftpack.fftshift(fdata)
     return fdata
+
+
+def ifft2(fdata):
+    return fftpack.ifft2(fdata)
+
+
+def magnitude(fdata):
+    return np.sqrt(np.real(fdata) ** 2 + np.imag(fdata) ** 2)
 
 
 def notch(n, sigma):
@@ -211,7 +223,8 @@ def gaussian_filter(shape, sigma):
 
     """
     g = notch(n=shape[-1], sigma=sigma)
-    return np.broadcast_to(g, shape)
+    g_mask = np.broadcast_to(g, shape).copy()
+    return g_mask
 
 
 def hist_match(source, template):
@@ -255,26 +268,22 @@ def hist_match(source, template):
     return interp_t_values[bin_idx].reshape(oldshape)
 
 
-def filter_streaks(img, sigma, level=0, wavelet='db2'):
-    """Filter horizontal streaks using wavelet-FFT filter
+def max_level(min_len, wavelet):
+    w = pywt.Wavelet(wavelet)
+    return pywt.dwt_max_level(min_len, w.dec_len)
 
-    Parameters
-    ----------
-    img : ndarray
-        input image array to filter
-    sigma : float
-        filter bandwidth (larger for more filtering)
-    level : int
-        number of wavelet levels to use
-    wavelet : str
-        name of the mother wavelet
 
-    Returns
-    -------
-    fimg : ndarray
-        filtered image
+def sigmoid(x):
+    return 1 / (1 + np.exp(-x))
 
-    """
+
+def foreground_fraction(img, center, crossover, smoothing):
+    z = (img-center)/crossover
+    f = sigmoid(z)
+    return ndimage.gaussian_filter(f, sigma=smoothing)
+
+
+def filter_subband(img, sigma, level, wavelet):
     if level == 0:
         coeffs = wavedec(img, wavelet)
     else:
@@ -282,22 +291,87 @@ def filter_streaks(img, sigma, level=0, wavelet='db2'):
     approx = coeffs[0]
     detail = coeffs[1:]
 
+    width_frac = sigma / img.shape[0]
     coeffs_filt = [approx]
     for ch, cv, cd in detail:
+        s = ch.shape[0] * width_frac
         fch = fft(ch, shift=False)
-        g = gaussian_filter(shape=fch.shape, sigma=sigma)
+        g = gaussian_filter(shape=fch.shape, sigma=s)
         fch_filt = fch * g
         ch_filt = ifft(fch_filt)
         coeffs_filt.append((ch_filt, cv, cd))
-
-    fimg = waverec(coeffs_filt, wavelet)
-
-    scaled_fimg = hist_match(fimg, img)
-    np.clip(scaled_fimg, np.iinfo(img.dtype).min, np.iinfo(img.dtype).max, out=scaled_fimg)
-    return scaled_fimg.astype(img.dtype)
+    return waverec(coeffs_filt, wavelet)
 
 
-def read_filter_save(input_path, output_path, sigma, level=0, wavelet='db2', compression=1):
+def filter_streaks(img, sigma, level=0, wavelet='db3', crossover=10):
+    """Filter horizontal streaks using wavelet-FFT filter
+
+    Parameters
+    ----------
+    img : ndarray
+        input image array to filter
+    sigma : float or list
+        filter bandwidth(s) in pixels (larger gives more filtering)
+    level : int
+        number of wavelet levels to use
+    wavelet : str
+        name of the mother wavelet
+    crossover : float
+        intensity range to switch between filtered background and unfiltered foreground
+
+    Returns
+    -------
+    fimg : ndarray
+        filtered image
+
+    """
+    smoothing = 1
+    try:
+        threshold = threshold_otsu(img)
+    except ValueError:
+        threshold = 1
+
+    img = np.array(img, dtype=np.float)
+
+    # TODO: Clean up this logic with some dual-band CLI alternative
+    sigma1 = sigma[0]  # foreground
+    sigma2 = sigma[1]  # background
+    if sigma1 > 0:
+        if sigma2 > 0:
+            if sigma1 == sigma2:  # Single band
+                fimg = filter_subband(img, sigma1, level, wavelet)
+            else:  # Dual-band
+                background = np.clip(img, None, threshold)
+                foreground = np.clip(img, threshold, None)
+                background_filtered = filter_subband(background, sigma[1], level, wavelet)
+                foreground_filtered = filter_subband(foreground, sigma[0], level, wavelet)
+                # Smoothed homotopy
+                f = foreground_fraction(img, threshold, crossover, smoothing=1)
+                fimg = foreground_filtered * f + background_filtered * (1 - f)
+        else:  # Foreground filter only
+            foreground = np.clip(img, threshold, None)
+            foreground_filtered = filter_subband(foreground, sigma[0], level, wavelet)
+            # Smoothed homotopy
+            f = foreground_fraction(img, threshold, crossover, smoothing=1)
+            fimg = foreground_filtered * f + img * (1 - f)
+    else:
+        if sigma2 > 0:  # Background filter only
+            background = np.clip(img, None, threshold)
+            background_filtered = filter_subband(background, sigma[1], level, wavelet)
+            # Smoothed homotopy
+            f = foreground_fraction(img, threshold, crossover, smoothing=1)
+            fimg = img * f + background_filtered * (1 - f)
+        else:
+            raise ValueError('invalid sigma1 or sigma2 values')
+
+    # scaled_fimg = hist_match(fimg, img)
+    # np.clip(scaled_fimg, np.iinfo(img.dtype).min, np.iinfo(img.dtype).max, out=scaled_fimg)
+
+    np.clip(fimg, 0, 2**16-1, out=fimg)  # Clip to 16-bit unsigned range
+    return fimg.astype('uint16')
+
+
+def read_filter_save(input_path, output_path, sigma, level=0, wavelet='db3', crossover=10, compression=1):
     """Convenience wrapper around filter streaks. Takes in a path to an image rather than an image array
     
     Note that the directory being written to must already exist before calling this function
@@ -314,12 +388,14 @@ def read_filter_save(input_path, output_path, sigma, level=0, wavelet='db2', com
         number of wavelet levels to use
     wavelet : str
         name of the mother wavelet
+    crossover : float
+        intensity range to switch between filtered background and unfiltered foreground
     compression : int
         compression level for writing tiffs
 
     """
     img = imread(str(input_path))
-    fimg = filter_streaks(img, sigma, level=level, wavelet=wavelet)
+    fimg = filter_streaks(img, sigma, level=level, wavelet=wavelet, crossover=crossover)
     imsave(str(output_path), fimg, compression=compression)
 
 
@@ -337,8 +413,9 @@ def _read_filter_save(input_dict):
     sigma = input_dict['sigma']
     level = input_dict['level']
     wavelet = input_dict['wavelet']
+    crossover = input_dict['crossover']
     compression = input_dict['compression']
-    read_filter_save(input_path, output_path, sigma, level, wavelet, compression)
+    read_filter_save(input_path, output_path, sigma, level, wavelet, crossover, compression)
 
 
 def _find_all_images(input_path):
@@ -367,7 +444,7 @@ def _find_all_images(input_path):
     return img_paths
 
 
-def batch_filter(input_path, output_path, workers, chunks, sigma, level=0, wavelet='db2', compression=1):
+def batch_filter(input_path, output_path, workers, chunks, sigma, level=0, wavelet='db3', crossover=10, compression=1):
     """Applies `streak_filter` to all images in `input_path` and write the results to `output_path`.
     
     Parameters
@@ -381,11 +458,13 @@ def batch_filter(input_path, output_path, workers, chunks, sigma, level=0, wavel
     chunks : int
         number of images for each CPU to process at a time
     sigma : float
-        bandwidth of the stripe filter
+        bandwidth of the stripe filter in pixels
     level : int
         number of wavelet levels to use
     wavelet : str
         name of the mother wavelet
+    crossover : float
+        intensity range to switch between filtered background and unfiltered foreground. Default: 100 a.u.
     compression : int
         compression level to use in tiff writing
 
@@ -393,7 +472,10 @@ def batch_filter(input_path, output_path, workers, chunks, sigma, level=0, wavel
     if workers == 0:
         workers = multiprocessing.cpu_count()
 
+    print(f'Looking for images in {input_path}...')
     img_paths = _find_all_images(input_path)
+    print(f'Found {len(img_paths)} compatible images')
+    print(f'Setting up {workers} workers...')
     args = []
     for p in img_paths:
         rel_path = p.relative_to(input_path)
@@ -406,30 +488,41 @@ def batch_filter(input_path, output_path, workers, chunks, sigma, level=0, wavel
             'sigma': sigma,
             'level': level,
             'wavelet': wavelet,
+            'crossover': crossover,
             'compression': compression
         }
         args.append(arg_dict)
-
+    print('Worker pool progress:')
     with multiprocessing.Pool(workers) as pool:
-        list(tqdm.tqdm(pool.imap(_read_filter_save, args, chunksize=chunks), total=len(args)))
+        list(tqdm.tqdm(pool.imap(_read_filter_save, args, chunksize=chunks), total=len(args), ascii=True))
+    print('Done!')
 
 
 def _parse_args():
-    parser = argparse.ArgumentParser(description="Streak elimination using wavelet and FFT filtering")
+    parser = argparse.ArgumentParser(description="Pystripe (version 0.2.0)\n\n"
+        "If sigma2 is specified, input images will be split into foreground and background using Otsu's method.\n"
+        "In this dual-band mode, sigma1 and sigma2 apply to foreground and background, respectively.\n"
+        "If only sigma1 is specified, input images will not be split before filtering",
+                                     formatter_class=RawDescriptionHelpFormatter,
+                                     epilog='Developed 2018 by Justin Swaney, Kwanghun Chung Lab\n'
+                                            'Massachusetts Institute of Technology\n')
     parser.add_argument("--input", "-i", help="Path to input image or path", type=str, required=True)
-    parser.add_argument("--output", "-o", help="Path to output image or path", type=str, default='')
-    parser.add_argument("--sigma", "-s", help="Bandwidth (larger for more filtering)", type=float, required=True)
-    parser.add_argument("--level", "-l", help="Number of decomposition levels", type=int, default=0)
-    parser.add_argument("--wavelet", "-w", help="Name of the mother wavelet", type=str, default='db2')
-    parser.add_argument("--workers", "-n", help="Number of workers (for batch processing)", type=int, default=0)
-    parser.add_argument("--chunks", help="Chunk size (for batch processing)", type=int, default=1)
-    parser.add_argument("--compression", "-c", help="Compression level for written tiffs", type=int, default=1)
+    parser.add_argument("--output", "-o", help="Path to output image or path (Default: x_destriped)", type=str, default='')
+    parser.add_argument("--sigma1", "-s1", help="Foreground bandwidth [pixels], larger = more filtering", type=float, required=True)
+    parser.add_argument("--sigma2", "-s2", help="Background bandwidth [pixels] (Default: 0, off)", type=float, default=0)
+    parser.add_argument("--level", "-l", help="Number of decomposition levels (Default: max possible)", type=int, default=0)
+    parser.add_argument("--wavelet", "-w", help="Name of the mother wavelet (Default: Daubechies 3 tap)", type=str, default='db3')
+    parser.add_argument("--crossover", "-x", help="Intensity range to switch between foreground and background (Default: 10)", type=float, default=10)
+    parser.add_argument("--workers", "-n", help="Number of workers for batch processing (Default: # CPU cores)", type=int, default=0)
+    parser.add_argument("--chunks", help="Chunk size for batch processing (Default: 1)", type=int, default=1)
+    parser.add_argument("--compression", "-c", help="Compression level for written tiffs (Default: 1)", type=int, default=1)
     args = parser.parse_args()
     return args
 
 
 def main():
     args = _parse_args()
+    sigma = [args.sigma1, args.sigma2]
     input_path = Path(args.input)
     if input_path.is_file():  # single image
         if input_path.suffix not in supported_extensions:
@@ -442,9 +535,10 @@ def main():
             assert output_path.suffix in supported_extensions
         read_filter_save(input_path,
                          output_path,
-                         sigma=args.sigma,
+                         sigma=sigma,
                          level=args.level,
                          wavelet=args.wavelet,
+                         crossover=args.crossover,
                          compression=args.compression)
     elif input_path.is_dir():  # batch processing
         if args.output == '':
@@ -456,9 +550,10 @@ def main():
                      output_path,
                      workers=args.workers,
                      chunks=args.chunks,
-                     sigma=args.sigma,
+                     sigma=sigma,
                      level=args.level,
                      wavelet=args.wavelet,
+                     crossover=args.crossover,
                      compression=args.compression)
     else:
         print('Cannot find input file or directory. Exiting...')
