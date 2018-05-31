@@ -1,5 +1,6 @@
 numpy
 scipy
+scikit-image
 tifffile
 PyWavelets
 tqdm

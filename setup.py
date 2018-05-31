@@ -14,6 +14,7 @@ setup(
     install_requires=[
         "numpy",
         "scipy",
+        "scikit-image",
         "tifffile",
         "PyWavelets",
         "tqdm",
