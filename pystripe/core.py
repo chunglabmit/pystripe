@@ -17,7 +17,7 @@ supported_extensions = ['.tif', '.tiff', '.raw']
 
 def _get_extension(path):
     """Extract the file extension from the provided path
-    
+
     Parameters
     ----------
     path : str
@@ -34,7 +34,7 @@ def _get_extension(path):
 
 def imread(path):
     """Load a tiff or raw image
-    
+
     Parameters
     ----------
     path : str
@@ -57,9 +57,9 @@ def imread(path):
 
 def imsave(path, img, compression=1):
     """Save an array as a tiff or raw image
-    
+
     The file format will be inferred from the file extension in `path`
-    
+
     Parameters
     ----------
     path : str
@@ -81,7 +81,7 @@ def imsave(path, img, compression=1):
 
 def wavedec(img, wavelet, level=None):
     """Decompose `img` using discrete (decimated) wavelet transform using `wavelet`
-    
+
     Parameters
     ----------
     img : ndarray
@@ -95,14 +95,14 @@ def wavedec(img, wavelet, level=None):
     -------
     coeffs : list
         the approximation coefficients followed by detail coefficient tuple for each level
-    
+
     """
     return pywt.wavedec2(img, wavelet, mode='symmetric', level=level, axes=(-2, -1))
 
 
 def waverec(coeffs, wavelet):
     """Reconstruct an image using a multilevel 2D inverse discrete wavelet transform
-    
+
     Parameters
     ----------
     coeffs : list
@@ -121,7 +121,7 @@ def waverec(coeffs, wavelet):
 
 def fft(data, axis=-1, shift=True):
     """Computes the 1D Fast Fourier Transform of an input array
-    
+
     Parameters
     ----------
     data : ndarray
@@ -151,7 +151,7 @@ def ifft(fdata, axis=-1):
 
 def fft2(data, shift=True):
     """Computes the 2D Fast Fourier Transform of an input array
-    
+
     Parameters
     ----------
     data : ndarray
@@ -181,7 +181,7 @@ def magnitude(fdata):
 
 def notch(n, sigma):
     """Generates a 1D gaussian notch filter `n` pixels long
-    
+
     Parameters
     ----------
     n : int
@@ -208,7 +208,7 @@ def notch(n, sigma):
 
 def gaussian_filter(shape, sigma):
     """Create a gaussian notch filter
-    
+
     Parameters
     ----------
     shape : tuple
@@ -240,7 +240,7 @@ def hist_match(source, template):
     -------
     matched: ndarray
         The transformed output image
-        
+
     """
 
     oldshape = source.shape
@@ -303,7 +303,7 @@ def filter_subband(img, sigma, level, wavelet):
     return waverec(coeffs_filt, wavelet)
 
 
-def filter_streaks(img, sigma, level=0, wavelet='db3', crossover=10):
+def filter_streaks(img, sigma, level=0, wavelet='db3', crossover=10, threshold=-1):
     """Filter horizontal streaks using wavelet-FFT filter
 
     Parameters
@@ -318,6 +318,8 @@ def filter_streaks(img, sigma, level=0, wavelet='db3', crossover=10):
         name of the mother wavelet
     crossover : float
         intensity range to switch between filtered background and unfiltered foreground
+    threshold : float
+        intensity value to separate background from foreground. Default is Otsu
 
     Returns
     -------
@@ -326,10 +328,13 @@ def filter_streaks(img, sigma, level=0, wavelet='db3', crossover=10):
 
     """
     smoothing = 1
-    try:
-        threshold = threshold_otsu(img)
-    except ValueError:
-        threshold = 1
+
+    if threshold == -1:
+        try:
+            threshold = threshold_otsu(img)
+        except ValueError:
+            threshold = 1
+
 
     img = np.array(img, dtype=np.float)
 
@@ -371,11 +376,11 @@ def filter_streaks(img, sigma, level=0, wavelet='db3', crossover=10):
     return fimg.astype('uint16')
 
 
-def read_filter_save(input_path, output_path, sigma, level=0, wavelet='db3', crossover=10, compression=1):
+def read_filter_save(input_path, output_path, sigma, level=0, wavelet='db3', crossover=10, threshold=-1, compression=1):
     """Convenience wrapper around filter streaks. Takes in a path to an image rather than an image array
-    
+
     Note that the directory being written to must already exist before calling this function
-    
+
     Parameters
     ----------
     input_path : Path
@@ -390,6 +395,8 @@ def read_filter_save(input_path, output_path, sigma, level=0, wavelet='db3', cro
         name of the mother wavelet
     crossover : float
         intensity range to switch between filtered background and unfiltered foreground
+    threshold : float
+        intensity value to separate background from foreground. Default is Otsu
     compression : int
         compression level for writing tiffs
 
@@ -401,7 +408,7 @@ def read_filter_save(input_path, output_path, sigma, level=0, wavelet='db3', cro
 
 def _read_filter_save(input_dict):
     """Same as `read_filter_save' but with a single input dictionary. Used for pool.imap() in batch_filter
-    
+
     Parameters
     ----------
     input_dict : dict
@@ -414,13 +421,14 @@ def _read_filter_save(input_dict):
     level = input_dict['level']
     wavelet = input_dict['wavelet']
     crossover = input_dict['crossover']
+    threshold = input_dict['threshold']
     compression = input_dict['compression']
-    read_filter_save(input_path, output_path, sigma, level, wavelet, crossover, compression)
+    read_filter_save(input_path, output_path, sigma, level, wavelet, crossover, threshold, compression)
 
 
 def _find_all_images(input_path):
     """Find all images with a supported file extension within a directory and all its subdirectories
-    
+
     Parameters
     ----------
     input_path : str
@@ -444,9 +452,9 @@ def _find_all_images(input_path):
     return img_paths
 
 
-def batch_filter(input_path, output_path, workers, chunks, sigma, level=0, wavelet='db3', crossover=10, compression=1):
+def batch_filter(input_path, output_path, workers, chunks, sigma, level=0, wavelet='db3', crossover=10, threshold=-1, compression=1):
     """Applies `streak_filter` to all images in `input_path` and write the results to `output_path`.
-    
+
     Parameters
     ----------
     input_path : Path
@@ -465,6 +473,8 @@ def batch_filter(input_path, output_path, workers, chunks, sigma, level=0, wavel
         name of the mother wavelet
     crossover : float
         intensity range to switch between filtered background and unfiltered foreground. Default: 100 a.u.
+    threshold : float
+        intensity value to separate background from foreground. Default is Otsu
     compression : int
         compression level to use in tiff writing
 
@@ -489,6 +499,7 @@ def batch_filter(input_path, output_path, workers, chunks, sigma, level=0, wavel
             'level': level,
             'wavelet': wavelet,
             'crossover': crossover,
+            'threshold': threshold,
             'compression': compression
         }
         args.append(arg_dict)
@@ -514,6 +525,7 @@ def _parse_args():
     parser.add_argument("--sigma2", "-s2", help="Background bandwidth [pixels] (Default: 0, off)", type=float, default=0)
     parser.add_argument("--level", "-l", help="Number of decomposition levels (Default: max possible)", type=int, default=0)
     parser.add_argument("--wavelet", "-w", help="Name of the mother wavelet (Default: Daubechies 3 tap)", type=str, default='db3')
+    parser.add_argument("--threshold", "-t", help="Global threshold value (Default: -1, Otsu)", type=float, default=-1)
     parser.add_argument("--crossover", "-x", help="Intensity range to switch between foreground and background (Default: 10)", type=float, default=10)
     parser.add_argument("--workers", "-n", help="Number of workers for batch processing (Default: # CPU cores)", type=int, default=0)
     parser.add_argument("--chunks", help="Chunk size for batch processing (Default: 1)", type=int, default=1)
@@ -541,6 +553,7 @@ def main():
                          level=args.level,
                          wavelet=args.wavelet,
                          crossover=args.crossover,
+                         threshold=args.threshold,
                          compression=args.compression)
     elif input_path.is_dir():  # batch processing
         if args.output == '':
@@ -556,6 +569,7 @@ def main():
                      level=args.level,
                      wavelet=args.wavelet,
                      crossover=args.crossover,
+                     threshold=args.threshold,
                      compression=args.compression)
     else:
         print('Cannot find input file or directory. Exiting...')
