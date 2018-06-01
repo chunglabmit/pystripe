@@ -500,9 +500,11 @@ def batch_filter(input_path, output_path, workers, chunks, sigma, level=0, wavel
 
 def _parse_args():
     parser = argparse.ArgumentParser(description="Pystripe (version 0.2.0)\n\n"
-        "If sigma2 is specified, input images will be split into foreground and background using Otsu's method.\n"
-        "In this dual-band mode, sigma1 and sigma2 apply to foreground and background, respectively.\n"
-        "If only sigma1 is specified, input images will not be split before filtering",
+        "If only sigma1 is specified, only foreground of the images will be filtered.\n"
+        "If sigma2 is specified and sigma1 = 0, only the background of the images will be filtered.\n"
+        "If sigma1 == sigma2 > 0, input images will not be split before filtering.\n"
+        "If sigma1 != sigma2, foreground and backgrounds will be filtered separately.\n"
+        "The crossover parameter defines the width of the transistion between the filtered foreground and background",
                                      formatter_class=RawDescriptionHelpFormatter,
                                      epilog='Developed 2018 by Justin Swaney, Kwanghun Chung Lab\n'
                                             'Massachusetts Institute of Technology\n')
