@@ -492,7 +492,7 @@ def batch_filter(input_path, output_path, workers, chunks, sigma, level=0, wavel
             'compression': compression
         }
         args.append(arg_dict)
-    print('Worker pool progress:')
+    print('Pystripe batch processing progress:')
     with multiprocessing.Pool(workers) as pool:
         list(tqdm.tqdm(pool.imap(_read_filter_save, args, chunksize=chunks), total=len(args), ascii=True))
     print('Done!')
