@@ -284,10 +284,12 @@ def foreground_fraction(img, center, crossover, smoothing):
 
 
 def filter_subband(img, sigma, level, wavelet):
+    img_log = np.log(1 + img)
+
     if level == 0:
-        coeffs = wavedec(img, wavelet)
+        coeffs = wavedec(img_log, wavelet)
     else:
-        coeffs = wavedec(img, wavelet, level)
+        coeffs = wavedec(img_log, wavelet, level)
     approx = coeffs[0]
     detail = coeffs[1:]
 
@@ -300,7 +302,9 @@ def filter_subband(img, sigma, level, wavelet):
         fch_filt = fch * g
         ch_filt = ifft(fch_filt)
         coeffs_filt.append((ch_filt, cv, cd))
-    return waverec(coeffs_filt, wavelet)
+
+    img_log_filtered = waverec(coeffs_filt, wavelet)
+    return np.exp(img_log_filtered)-1
 
 
 def filter_streaks(img, sigma, level=0, wavelet='db3', crossover=10, threshold=-1):
