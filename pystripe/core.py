@@ -486,10 +486,10 @@ def batch_filter(input_path, output_path, workers, chunks, sigma, level=0, wavel
     if workers == 0:
         workers = multiprocessing.cpu_count()
 
-    print(f'Looking for images in {input_path}...')
+    print('Looking for images in {}...'.format(input_path))
     img_paths = _find_all_images(input_path)
-    print(f'Found {len(img_paths)} compatible images')
-    print(f'Setting up {workers} workers...')
+    print('Found {} compatible images'.format(len(img_paths)))
+    print('Setting up {} workers...'.format(workers))
     args = []
     for p in img_paths:
         rel_path = p.relative_to(input_path)
