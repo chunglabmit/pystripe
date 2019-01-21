@@ -307,7 +307,11 @@ def filter_subband(img, sigma, level, wavelet):
     return np.exp(img_log_filtered)-1
 
 
-def filter_streaks(img, sigma, level=0, wavelet='db3', crossover=10, threshold=-1):
+def apply_flat(img, flat):
+    return (img / flat).astype(img.dtype)
+
+
+def filter_streaks(img, sigma, level=0, wavelet='db3', crossover=10, threshold=-1, flat=None):
     """Filter horizontal streaks using wavelet-FFT filter
 
     Parameters
@@ -324,6 +328,8 @@ def filter_streaks(img, sigma, level=0, wavelet='db3', crossover=10, threshold=-
         intensity range to switch between filtered background and unfiltered foreground
     threshold : float
         intensity value to separate background from foreground. Default is Otsu
+    flat : ndarray
+        reference image for illumination correction. Must be same shape as input images. Default is None
 
     Returns
     -------
@@ -338,7 +344,6 @@ def filter_streaks(img, sigma, level=0, wavelet='db3', crossover=10, threshold=-
             threshold = threshold_otsu(img)
         except ValueError:
             threshold = 1
-
 
     img = np.array(img, dtype=np.float)
 
@@ -373,14 +378,20 @@ def filter_streaks(img, sigma, level=0, wavelet='db3', crossover=10, threshold=-
         else:
             raise ValueError('invalid sigma1 or sigma2 values')
 
+    # TODO: Fix code to clip back to original bit depth
     # scaled_fimg = hist_match(fimg, img)
     # np.clip(scaled_fimg, np.iinfo(img.dtype).min, np.iinfo(img.dtype).max, out=scaled_fimg)
 
-    np.clip(fimg, 0, 2**16-1, out=fimg)  # Clip to 16-bit unsigned range
-    return fimg.astype('uint16')
+    if flat is not None:
+        fimg = apply_flat(fimg, flat)
+
+    np.clip(fimg, 0, 2**16 - 1, out=fimg)  # Clip to 16-bit unsigned range
+    fimg = fimg.astype('uint16')
+
+    return fimg
 
 
-def read_filter_save(input_path, output_path, sigma, level=0, wavelet='db3', crossover=10, threshold=-1, compression=1):
+def read_filter_save(input_path, output_path, sigma, level=0, wavelet='db3', crossover=10, threshold=-1, compression=1, flat=None):
     """Convenience wrapper around filter streaks. Takes in a path to an image rather than an image array
 
     Note that the directory being written to must already exist before calling this function
@@ -391,7 +402,7 @@ def read_filter_save(input_path, output_path, sigma, level=0, wavelet='db3', cro
         path to the image to filter
     output_path : Path
         path to write the result
-    sigma : float
+    sigma : list
         bandwidth of the stripe filter
     level : int
         number of wavelet levels to use
@@ -403,10 +414,12 @@ def read_filter_save(input_path, output_path, sigma, level=0, wavelet='db3', cro
         intensity value to separate background from foreground. Default is Otsu
     compression : int
         compression level for writing tiffs
+    flat : ndarray
+        reference image for illumination correction. Must be same shape as input images. Default is None
 
     """
     img = imread(str(input_path))
-    fimg = filter_streaks(img, sigma, level=level, wavelet=wavelet, crossover=crossover)
+    fimg = filter_streaks(img, sigma, level=level, wavelet=wavelet, crossover=crossover, threshold=threshold, flat=flat)
     imsave(str(output_path), fimg, compression=compression)
 
 
@@ -419,15 +432,17 @@ def _read_filter_save(input_dict):
         input dictionary with arguments for `read_filter_save`.
 
     """
-    input_path = input_dict['input_path']
-    output_path = input_dict['output_path']
-    sigma = input_dict['sigma']
-    level = input_dict['level']
-    wavelet = input_dict['wavelet']
-    crossover = input_dict['crossover']
-    threshold = input_dict['threshold']
-    compression = input_dict['compression']
-    read_filter_save(input_path, output_path, sigma, level, wavelet, crossover, threshold, compression)
+    # input_path = input_dict['input_path']
+    # output_path = input_dict['output_path']
+    # sigma = input_dict['sigma']
+    # level = input_dict['level']
+    # wavelet = input_dict['wavelet']
+    # crossover = input_dict['crossover']
+    # threshold = input_dict['threshold']
+    # compression = input_dict['compression']
+    # flat = input_dict['flat']
+    # read_filter_save(input_path, output_path, sigma, level, wavelet, crossover, threshold, compression, flat)
+    read_filter_save(**input_dict)
 
 
 def _find_all_images(input_path):
@@ -435,7 +450,7 @@ def _find_all_images(input_path):
 
     Parameters
     ----------
-    input_path : str
+    input_path : path-like
         root directory to start image search
 
     Returns
@@ -456,7 +471,7 @@ def _find_all_images(input_path):
     return img_paths
 
 
-def batch_filter(input_path, output_path, workers, chunks, sigma, level=0, wavelet='db3', crossover=10, threshold=-1, compression=1):
+def batch_filter(input_path, output_path, workers, chunks, sigma, level=0, wavelet='db3', crossover=10, threshold=-1, compression=1, flat=None):
     """Applies `streak_filter` to all images in `input_path` and write the results to `output_path`.
 
     Parameters
@@ -469,7 +484,7 @@ def batch_filter(input_path, output_path, workers, chunks, sigma, level=0, wavel
         number of CPU workers to use
     chunks : int
         number of images for each CPU to process at a time
-    sigma : float
+    sigma : list
         bandwidth of the stripe filter in pixels
     level : int
         number of wavelet levels to use
@@ -481,6 +496,8 @@ def batch_filter(input_path, output_path, workers, chunks, sigma, level=0, wavel
         intensity value to separate background from foreground. Default is Otsu
     compression : int
         compression level to use in tiff writing
+    flat : ndarray
+        reference image for illumination correction. Must be same shape as input images. Default is None
 
     """
     if workers == 0:
@@ -504,13 +521,19 @@ def batch_filter(input_path, output_path, workers, chunks, sigma, level=0, wavel
             'wavelet': wavelet,
             'crossover': crossover,
             'threshold': threshold,
-            'compression': compression
+            'compression': compression,
+            'flat': flat
         }
         args.append(arg_dict)
     print('Pystripe batch processing progress:')
     with multiprocessing.Pool(workers) as pool:
         list(tqdm.tqdm(pool.imap(_read_filter_save, args, chunksize=chunks), total=len(args), ascii=True))
     print('Done!')
+
+
+def normalize_flat(flat):
+    flat_float = flat.astype(np.float32)
+    return flat_float / flat_float.max()
 
 
 def _parse_args():
@@ -534,6 +557,7 @@ def _parse_args():
     parser.add_argument("--workers", "-n", help="Number of workers for batch processing (Default: # CPU cores)", type=int, default=0)
     parser.add_argument("--chunks", help="Chunk size for batch processing (Default: 1)", type=int, default=1)
     parser.add_argument("--compression", "-c", help="Compression level for written tiffs (Default: 1)", type=int, default=1)
+    parser.add_argument("--flat", "-f", help="Flat reference TIFF image of illumination pattern used for correction", type=str, default=None)
     args = parser.parse_args()
     return args
 
@@ -542,9 +566,14 @@ def main():
     args = _parse_args()
     sigma = [args.sigma1, args.sigma2]
     input_path = Path(args.input)
+
+    flat = None
+    if args.flat is not None:
+        flat = normalize_flat(imread(args.flat))
+
     if input_path.is_file():  # single image
         if input_path.suffix not in supported_extensions:
-            print('Input file was found, but is not supported. Exiting...')
+            print('Input file was found but is not supported. Exiting...')
             return
         if args.output == '':
             output_path = Path(input_path.parent).joinpath(input_path.stem+'_destriped'+input_path.suffix)
@@ -558,7 +587,8 @@ def main():
                          wavelet=args.wavelet,
                          crossover=args.crossover,
                          threshold=args.threshold,
-                         compression=args.compression)
+                         compression=args.compression,
+                         flat=flat)
     elif input_path.is_dir():  # batch processing
         if args.output == '':
             output_path = Path(input_path.parent).joinpath(str(input_path)+'_destriped')
@@ -574,7 +604,8 @@ def main():
                      wavelet=args.wavelet,
                      crossover=args.crossover,
                      threshold=args.threshold,
-                     compression=args.compression)
+                     compression=args.compression,
+                     flat=flat)
     else:
         print('Cannot find input file or directory. Exiting...')
 
