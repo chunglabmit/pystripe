@@ -276,16 +276,16 @@ def max_level(min_len, wavelet):
     return pywt.dwt_max_level(min_len, w.dec_len)
 
 
-# def sigmoid(x):
-#     return 1 / (1 + np.exp(-x))
-
 def sigmoid(x):
-    if x >= 0:
-        z = np.exp(-x)
-        return 1 / (1 + z)
-    else:
-        z = np.exp(x)
-        return z / (1 + z)
+    return 1 / (1 + np.exp(-x))
+
+# def sigmoid(x):
+#     if x >= 0:
+#         z = np.exp(-x)
+#         return 1 / (1 + z)
+#     else:
+#         z = np.exp(x)
+#         return z / (1 + z)
 
 
 def foreground_fraction(img, center, crossover, smoothing):
