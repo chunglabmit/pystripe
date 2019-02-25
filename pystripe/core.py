@@ -322,7 +322,7 @@ def apply_flat(img, flat):
     return (img / flat).astype(img.dtype)
 
 
-def filter_streaks(img, sigma, level=0, wavelet='db3', crossover=10, threshold=-1, flat=None):
+def filter_streaks(img, sigma, level=0, wavelet='db3', crossover=10, threshold=-1, flat=None, dark=dark):
     """Filter horizontal streaks using wavelet-FFT filter
 
     Parameters
@@ -341,6 +341,8 @@ def filter_streaks(img, sigma, level=0, wavelet='db3', crossover=10, threshold=-
         intensity value to separate background from foreground. Default is Otsu
     flat : ndarray
         reference image for illumination correction. Must be same shape as input images. Default is None
+    dark : float
+        Intensity to subtract from the images for dark offset. Default is 0.
 
     Returns
     -------
@@ -393,16 +395,22 @@ def filter_streaks(img, sigma, level=0, wavelet='db3', crossover=10, threshold=-
     # scaled_fimg = hist_match(fimg, img)
     # np.clip(scaled_fimg, np.iinfo(img.dtype).min, np.iinfo(img.dtype).max, out=scaled_fimg)
 
+    # Subtract the dark offset fiirst
+    if dark > 0:
+        fimg = fimg - dark
+
+    # Divide by the flat
     if flat is not None:
         fimg = apply_flat(fimg, flat)
 
+    # Convert to 16 bit image
     np.clip(fimg, 0, 2**16 - 1, out=fimg)  # Clip to 16-bit unsigned range
     fimg = fimg.astype('uint16')
 
     return fimg
 
 
-def read_filter_save(input_path, output_path, sigma, level=0, wavelet='db3', crossover=10, threshold=-1, compression=1, flat=None):
+def read_filter_save(input_path, output_path, sigma, level=0, wavelet='db3', crossover=10, threshold=-1, compression=1, flat=None, dark=0):
     """Convenience wrapper around filter streaks. Takes in a path to an image rather than an image array
 
     Note that the directory being written to must already exist before calling this function
@@ -427,10 +435,12 @@ def read_filter_save(input_path, output_path, sigma, level=0, wavelet='db3', cro
         compression level for writing tiffs
     flat : ndarray
         reference image for illumination correction. Must be same shape as input images. Default is None
+    dark : float
+        Intensity to subtract from the images for dark offset. Default is 0.
 
     """
     img = imread(str(input_path))
-    fimg = filter_streaks(img, sigma, level=level, wavelet=wavelet, crossover=crossover, threshold=threshold, flat=flat)
+    fimg = filter_streaks(img, sigma, level=level, wavelet=wavelet, crossover=crossover, threshold=threshold, flat=flat, dark=dark)
     imsave(str(output_path), fimg, compression=compression)
 
 
@@ -482,7 +492,7 @@ def _find_all_images(input_path):
     return img_paths
 
 
-def batch_filter(input_path, output_path, workers, chunks, sigma, level=0, wavelet='db3', crossover=10, threshold=-1, compression=1, flat=None):
+def batch_filter(input_path, output_path, workers, chunks, sigma, level=0, wavelet='db3', crossover=10, threshold=-1, compression=1, flat=None, dark=0):
     """Applies `streak_filter` to all images in `input_path` and write the results to `output_path`.
 
     Parameters
@@ -509,6 +519,8 @@ def batch_filter(input_path, output_path, workers, chunks, sigma, level=0, wavel
         compression level to use in tiff writing
     flat : ndarray
         reference image for illumination correction. Must be same shape as input images. Default is None
+    dark : float
+        Intensity to subtract from the images for dark offset. Default is 0.
 
     """
     if workers == 0:
@@ -533,7 +545,8 @@ def batch_filter(input_path, output_path, workers, chunks, sigma, level=0, wavel
             'crossover': crossover,
             'threshold': threshold,
             'compression': compression,
-            'flat': flat
+            'flat': flat,
+            'dark': dark
         }
         args.append(arg_dict)
     print('Pystripe batch processing progress:')
@@ -569,6 +582,7 @@ def _parse_args():
     parser.add_argument("--chunks", help="Chunk size for batch processing (Default: 1)", type=int, default=1)
     parser.add_argument("--compression", "-c", help="Compression level for written tiffs (Default: 1)", type=int, default=1)
     parser.add_argument("--flat", "-f", help="Flat reference TIFF image of illumination pattern used for correction", type=str, default=None)
+    parser.add_argument("--dark", "-d", help="Intensity of dark offset in flat-field correction", type=float, default=0)
     args = parser.parse_args()
     return args
 
@@ -581,6 +595,9 @@ def main():
     flat = None
     if args.flat is not None:
         flat = normalize_flat(imread(args.flat))
+
+    if args.dark < 0:
+        raise ValueError('Only positive values for dark offset are allowed')
 
     if input_path.is_file():  # single image
         if input_path.suffix not in supported_extensions:
@@ -599,7 +616,8 @@ def main():
                          crossover=args.crossover,
                          threshold=args.threshold,
                          compression=args.compression,
-                         flat=flat)
+                         flat=flat,
+                         dark=args.dark)
     elif input_path.is_dir():  # batch processing
         if args.output == '':
             output_path = Path(input_path.parent).joinpath(str(input_path)+'_destriped')
@@ -616,7 +634,8 @@ def main():
                      crossover=args.crossover,
                      threshold=args.threshold,
                      compression=args.compression,
-                     flat=flat)
+                     flat=flat,
+                     dark=args.dark)
     else:
         print('Cannot find input file or directory. Exiting...')
 
