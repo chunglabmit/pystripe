@@ -322,7 +322,7 @@ def apply_flat(img, flat):
     return (img / flat).astype(img.dtype)
 
 
-def filter_streaks(img, sigma, level=0, wavelet='db3', crossover=10, threshold=-1, flat=None, dark=dark):
+def filter_streaks(img, sigma, level=0, wavelet='db3', crossover=10, threshold=-1, flat=None, dark=0):
     """Filter horizontal streaks using wavelet-FFT filter
 
     Parameters
