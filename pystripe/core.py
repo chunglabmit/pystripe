@@ -447,6 +447,7 @@ def read_filter_save(input_path, output_path, sigma, level=0, wavelet='db3', cro
         try:
             imsave(str(output_path), fimg, compression=compression)
         except OSError:
+            print('Retrying...')
             continue
         break
 
