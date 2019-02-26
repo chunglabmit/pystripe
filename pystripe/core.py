@@ -16,6 +16,7 @@ warnings.filterwarnings("ignore")
 
 
 supported_extensions = ['.tif', '.tiff', '.raw']
+nb_retry = 10
 
 
 def _get_extension(path):
@@ -441,7 +442,13 @@ def read_filter_save(input_path, output_path, sigma, level=0, wavelet='db3', cro
     """
     img = imread(str(input_path))
     fimg = filter_streaks(img, sigma, level=level, wavelet=wavelet, crossover=crossover, threshold=threshold, flat=flat, dark=dark)
-    imsave(str(output_path), fimg, compression=compression)
+    # Save image, retry if OSError for NAS
+    for _ in range(nb_retry):
+        try:
+            imsave(str(output_path), fimg, compression=compression)
+        except OSError:
+            continue
+        break
 
 
 def _read_filter_save(input_dict):
