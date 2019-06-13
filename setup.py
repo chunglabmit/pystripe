@@ -18,7 +18,8 @@ setup(
         "tifffile",
         "PyWavelets",
         "tqdm",
-        "pathlib2"
+        "pathlib2",
+        "dcimg"
     ],
     author="Kwanghun Chung Lab",
     packages=["pystripe"],

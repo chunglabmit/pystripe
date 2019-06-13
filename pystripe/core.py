@@ -9,13 +9,14 @@ import tifffile
 import pywt
 import multiprocessing
 import tqdm
+from dcimg import DCIMGFile
 from pystripe import raw
 
 import warnings
 warnings.filterwarnings("ignore")
 
 
-supported_extensions = ['.tif', '.tiff', '.raw']
+supported_extensions = ['.tif', '.tiff', '.raw', '.dcimg']
 nb_retry = 10
 
 
@@ -57,6 +58,66 @@ def imread(path):
     elif extension == '.tif' or extension == '.tiff':
         img = tifffile.imread(path)
     return img
+
+
+def imread_dcimg(path, z):
+    """Load a slice from a DCIMG file
+
+    Parameters
+    ------------
+    path : str
+        path to DCIMG file
+    z : int
+        z slice index to load
+
+    Returns
+    --------
+    img : ndarray
+        image as numpy array
+
+    """
+    with DCIMGFile(path) as arr:
+        img = arr[z]
+    return img
+
+
+def check_dcimg_shape(path):
+    """Returns the image shape of a DCIMG file
+
+    Parameters
+    ------------
+    path : str
+        path to DCIMG file
+
+    Returns
+    --------
+    shape : tuple
+        image shape
+
+    """
+    with DCIMGFile(path) as arr:
+        shape = arr.shape
+    return shape
+
+
+def check_dcimg_start(path):
+    """Returns the starting z position of a DCIMG substack.
+
+    This function assumes a zero-padded 6 digit filename in tenths of micron.
+    For example, `0015250.dicom` would indicate a substack starting at z = 1525 um.
+
+    Parameters
+    ------------
+    path : str
+        path to DCIMG file
+
+    Returns
+    --------
+    start : int
+        starting z position in tenths of micron
+
+    """
+    return int(os.path.basename(path).split('.')[0])
 
 
 def imsave(path, img, compression=1):
@@ -411,7 +472,7 @@ def filter_streaks(img, sigma, level=0, wavelet='db3', crossover=10, threshold=-
     return fimg
 
 
-def read_filter_save(input_path, output_path, sigma, level=0, wavelet='db3', crossover=10, threshold=-1, compression=1, flat=None, dark=0):
+def read_filter_save(input_path, output_path, sigma, level=0, wavelet='db3', crossover=10, threshold=-1, compression=1, flat=None, dark=0, z_idx=None):
     """Convenience wrapper around filter streaks. Takes in a path to an image rather than an image array
 
     Note that the directory being written to must already exist before calling this function
@@ -438,9 +499,17 @@ def read_filter_save(input_path, output_path, sigma, level=0, wavelet='db3', cro
         reference image for illumination correction. Must be same shape as input images. Default is None
     dark : float
         Intensity to subtract from the images for dark offset. Default is 0.
+    z_idx : int
+        z index of DCIMG slice. Only applicable to DCIMG files.
 
     """
-    img = imread(str(input_path))
+    if z_idx is None:
+        # Path must be TIFF or RAW
+        img = imread(str(input_path))
+    else:
+        # Path must be to DCIMG file
+        assert str(input_path).endswith('.dcimg')
+        img = imread_dcimg(str(input_path), z_idx)
     fimg = filter_streaks(img, sigma, level=level, wavelet=wavelet, crossover=crossover, threshold=threshold, flat=flat, dark=dark)
     # Save image, retry if OSError for NAS
     for _ in range(nb_retry):
@@ -474,13 +543,15 @@ def _read_filter_save(input_dict):
     read_filter_save(**input_dict)
 
 
-def _find_all_images(input_path):
+def _find_all_images(input_path, zstep=None):
     """Find all images with a supported file extension within a directory and all its subdirectories
 
     Parameters
     ----------
     input_path : path-like
         root directory to start image search
+    zstep : int
+        step-size for DCIMG stacks
 
     Returns
     -------
@@ -494,13 +565,20 @@ def _find_all_images(input_path):
     for p in input_path.iterdir():
         if p.is_file():
             if p.suffix in supported_extensions:
-                img_paths.append(p)
+                if p.suffix == '.dcimg':
+                    assert zstep is not None
+                    shape = check_dcimg_shape(str(p))
+                    start = check_dcimg_start(str(p))
+                    substack = [(p, i, start + i * zstep) for i in range(shape[0])]
+                    img_paths += substack
+                else:
+                    img_paths.append(p)
         elif p.is_dir():
             img_paths.extend(_find_all_images(p))
     return img_paths
 
 
-def batch_filter(input_path, output_path, workers, chunks, sigma, level=0, wavelet='db3', crossover=10, threshold=-1, compression=1, flat=None, dark=0):
+def batch_filter(input_path, output_path, workers, chunks, sigma, level=0, wavelet='db3', crossover=10, threshold=-1, compression=1, flat=None, dark=0, zstep=None):
     """Applies `streak_filter` to all images in `input_path` and write the results to `output_path`.
 
     Parameters
@@ -533,15 +611,20 @@ def batch_filter(input_path, output_path, workers, chunks, sigma, level=0, wavel
     """
     if workers == 0:
         workers = multiprocessing.cpu_count()
-
     print('Looking for images in {}...'.format(input_path))
-    img_paths = _find_all_images(input_path)
+    img_paths = _find_all_images(input_path, zstep)
     print('Found {} compatible images'.format(len(img_paths)))
     print('Setting up {} workers...'.format(workers))
     args = []
     for p in img_paths:
-        rel_path = p.relative_to(input_path)
+        if isinstance(p, tuple):  # DCIMG found
+            p, z_idx, z = p
+            rel_path = p.relative_to(input_path).parent.joinpath('{:04d}.tif'.format(z))
+        else:  # TIFF or RAW found
+            z_idx = None
+            rel_path = p.relative_to(input_path)
         o = output_path.joinpath(rel_path)
+        print(o)
         if not o.parent.exists():
             o.parent.mkdir(parents=True)
         arg_dict = {
@@ -554,7 +637,8 @@ def batch_filter(input_path, output_path, workers, chunks, sigma, level=0, wavel
             'threshold': threshold,
             'compression': compression,
             'flat': flat,
-            'dark': dark
+            'dark': dark,
+            'z_idx': z_idx,
         }
         args.append(arg_dict)
     print('Pystripe batch processing progress:')
@@ -591,6 +675,7 @@ def _parse_args():
     parser.add_argument("--compression", "-c", help="Compression level for written tiffs (Default: 1)", type=int, default=1)
     parser.add_argument("--flat", "-f", help="Flat reference TIFF image of illumination pattern used for correction", type=str, default=None)
     parser.add_argument("--dark", "-d", help="Intensity of dark offset in flat-field correction", type=float, default=0)
+    parser.add_argument("--zstep", "-z", help="Z-step in micron. Only used for DCIMG files.", type=float, default=None)
     args = parser.parse_args()
     return args
 
@@ -603,6 +688,10 @@ def main():
     flat = None
     if args.flat is not None:
         flat = normalize_flat(imread(args.flat))
+
+    zstep = None
+    if args.zstep is not None:
+        zstep = int(args.zstep * 10)
 
     if args.dark < 0:
         raise ValueError('Only positive values for dark offset are allowed')
@@ -625,7 +714,7 @@ def main():
                          threshold=args.threshold,
                          compression=args.compression,
                          flat=flat,
-                         dark=args.dark)
+                         dark=args.dark)  # Does not work on DCIMG files
     elif input_path.is_dir():  # batch processing
         if args.output == '':
             output_path = Path(input_path.parent).joinpath(str(input_path)+'_destriped')
@@ -643,7 +732,8 @@ def main():
                      threshold=args.threshold,
                      compression=args.compression,
                      flat=flat,
-                     dark=args.dark)
+                     dark=args.dark,
+                     zstep=zstep)
     else:
         print('Cannot find input file or directory. Exiting...')
 

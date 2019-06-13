@@ -5,3 +5,4 @@ tifffile
 PyWavelets
 tqdm
 pathlib2
+dcimg
