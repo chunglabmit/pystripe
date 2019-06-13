@@ -551,7 +551,7 @@ def _find_all_images(input_path, zstep=None):
     input_path : path-like
         root directory to start image search
     zstep : int
-        step-size for DCIMG stacks
+        step-size for DCIMG stacks in tenths of micron
 
     Returns
     -------
@@ -574,7 +574,7 @@ def _find_all_images(input_path, zstep=None):
                 else:
                     img_paths.append(p)
         elif p.is_dir():
-            img_paths.extend(_find_all_images(p))
+            img_paths.extend(_find_all_images(p, zstep))
     return img_paths
 
 
@@ -607,6 +607,8 @@ def batch_filter(input_path, output_path, workers, chunks, sigma, level=0, wavel
         reference image for illumination correction. Must be same shape as input images. Default is None
     dark : float
         Intensity to subtract from the images for dark offset. Default is 0.
+    zstep : int
+        Zstep in tenths of micron. only used for DCIMG files.
 
     """
     if workers == 0:
@@ -624,7 +626,6 @@ def batch_filter(input_path, output_path, workers, chunks, sigma, level=0, wavel
             z_idx = None
             rel_path = p.relative_to(input_path)
         o = output_path.joinpath(rel_path)
-        print(o)
         if not o.parent.exists():
             o.parent.mkdir(parents=True)
         arg_dict = {
