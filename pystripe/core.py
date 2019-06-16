@@ -568,7 +568,8 @@ def _find_all_images(input_path, zstep=None):
         if p.is_file():
             if p.suffix in supported_extensions:
                 if p.suffix == '.dcimg':
-                    assert zstep is not None
+                    if zstep is None:
+                        raise ValueError('Unknown zstep for DCIMG slice positions')
                     shape = check_dcimg_shape(str(p))
                     start = check_dcimg_start(str(p))
                     substack = [(p, i, start + i * zstep) for i in range(shape[0])]
