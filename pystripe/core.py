@@ -472,7 +472,7 @@ def filter_streaks(img, sigma, level=0, wavelet='db3', crossover=10, threshold=-
     return fimg
 
 
-def read_filter_save(input_path, output_path, sigma, level=0, wavelet='db3', crossover=10, threshold=-1, compression=1, flat=None, dark=0, z_idx=None):
+def read_filter_save(input_path, output_path, sigma, level=0, wavelet='db3', crossover=10, threshold=-1, compression=1, flat=None, dark=0, z_idx=None, rotate=False):
     """Convenience wrapper around filter streaks. Takes in a path to an image rather than an image array
 
     Note that the directory being written to must already exist before calling this function
@@ -510,6 +510,8 @@ def read_filter_save(input_path, output_path, sigma, level=0, wavelet='db3', cro
         # Path must be to DCIMG file
         assert str(input_path).endswith('.dcimg')
         img = imread_dcimg(str(input_path), z_idx)
+    if rotate:
+        img = np.rot90(img)
     fimg = filter_streaks(img, sigma, level=level, wavelet=wavelet, crossover=crossover, threshold=threshold, flat=flat, dark=dark)
     # Save image, retry if OSError for NAS
     for _ in range(nb_retry):
@@ -578,7 +580,7 @@ def _find_all_images(input_path, zstep=None):
     return img_paths
 
 
-def batch_filter(input_path, output_path, workers, chunks, sigma, level=0, wavelet='db3', crossover=10, threshold=-1, compression=1, flat=None, dark=0, zstep=None):
+def batch_filter(input_path, output_path, workers, chunks, sigma, level=0, wavelet='db3', crossover=10, threshold=-1, compression=1, flat=None, dark=0, zstep=None, rotate=False):
     """Applies `streak_filter` to all images in `input_path` and write the results to `output_path`.
 
     Parameters
@@ -609,6 +611,8 @@ def batch_filter(input_path, output_path, workers, chunks, sigma, level=0, wavel
         Intensity to subtract from the images for dark offset. Default is 0.
     zstep : int
         Zstep in tenths of micron. only used for DCIMG files.
+    rotate : bool
+        Flag for 90 degree rotation.
 
     """
     if workers == 0:
@@ -640,6 +644,7 @@ def batch_filter(input_path, output_path, workers, chunks, sigma, level=0, wavel
             'flat': flat,
             'dark': dark,
             'z_idx': z_idx,
+            'rotate': rotate,
         }
         args.append(arg_dict)
     print('Pystripe batch processing progress:')
@@ -677,6 +682,7 @@ def _parse_args():
     parser.add_argument("--flat", "-f", help="Flat reference TIFF image of illumination pattern used for correction", type=str, default=None)
     parser.add_argument("--dark", "-d", help="Intensity of dark offset in flat-field correction", type=float, default=0)
     parser.add_argument("--zstep", "-z", help="Z-step in micron. Only used for DCIMG files.", type=float, default=None)
+    parser.add_argument("--rotate", "-r", help="Rotate output images 90 degrees counter-clockwise", action='store_true')
     args = parser.parse_args()
     return args
 
@@ -715,7 +721,8 @@ def main():
                          threshold=args.threshold,
                          compression=args.compression,
                          flat=flat,
-                         dark=args.dark)  # Does not work on DCIMG files
+                         dark=args.dark,
+                         rotate=args.rotate)  # Does not work on DCIMG files
     elif input_path.is_dir():  # batch processing
         if args.output == '':
             output_path = Path(input_path.parent).joinpath(str(input_path)+'_destriped')
@@ -734,7 +741,8 @@ def main():
                      compression=args.compression,
                      flat=flat,
                      dark=args.dark,
-                     zstep=zstep)
+                     zstep=zstep,
+                     rotate=args.rotate)
     else:
         print('Cannot find input file or directory. Exiting...')
 
