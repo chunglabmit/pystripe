@@ -451,7 +451,8 @@ def filter_streaks(img, sigma, level=0, wavelet='db3', crossover=10, threshold=-
             f = foreground_fraction(img, threshold, crossover, smoothing=1)
             fimg = img * f + background_filtered * (1 - f)
         else:
-            raise ValueError('invalid sigma1 or sigma2 values')
+            # sigma1 and sigma2 are both 0, so skip the destriping
+            fimg = img
 
     # TODO: Fix code to clip back to original bit depth
     # scaled_fimg = hist_match(fimg, img)
@@ -671,7 +672,7 @@ def _parse_args():
                                             'Massachusetts Institute of Technology\n')
     parser.add_argument("--input", "-i", help="Path to input image or path", type=str, required=True)
     parser.add_argument("--output", "-o", help="Path to output image or path (Default: x_destriped)", type=str, default='')
-    parser.add_argument("--sigma1", "-s1", help="Foreground bandwidth [pixels], larger = more filtering", type=float, required=True)
+    parser.add_argument("--sigma1", "-s1", help="Foreground bandwidth [pixels], larger = more filtering", type=float, default=0)
     parser.add_argument("--sigma2", "-s2", help="Background bandwidth [pixels] (Default: 0, off)", type=float, default=0)
     parser.add_argument("--level", "-l", help="Number of decomposition levels (Default: max possible)", type=int, default=0)
     parser.add_argument("--wavelet", "-w", help="Name of the mother wavelet (Default: Daubechies 3 tap)", type=str, default='db3')
