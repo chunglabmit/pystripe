@@ -81,4 +81,4 @@ named "pystripe" (see Installation). Also, the script itself **cannot** be named
 `PATH`. Feel free to adjust the parameters or add any of the additional arguments mentioned above.
 
 ## Authors
-Phathom is maintained by members of the [Kwanghun Chung Lab](http://www.chunglab.org/) at MIT.
+Pystripe is maintained by members of the [Kwanghun Chung Lab](http://www.chunglab.org/) at MIT.
