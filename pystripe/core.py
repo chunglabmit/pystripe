@@ -421,6 +421,12 @@ def filter_streaks(img, sigma, level=0, wavelet='db3', crossover=10, threshold=-
             threshold = 1
 
     img = np.array(img, dtype=np.float)
+    #
+    # Need to pad image to multiple of 2
+    #
+    pady, padx = [_ % 2 for _ in img.shape]
+    if pady == 1 or padx == 1:
+        img = np.pad(img, ((0, pady), (0, padx)), mode="edge")
 
     # TODO: Clean up this logic with some dual-band CLI alternative
     sigma1 = sigma[0]  # foreground
@@ -470,6 +476,10 @@ def filter_streaks(img, sigma, level=0, wavelet='db3', crossover=10, threshold=-
     np.clip(fimg, 0, 2**16 - 1, out=fimg)  # Clip to 16-bit unsigned range
     fimg = fimg.astype('uint16')
 
+    if padx > 0:
+        fimg = fimg[:, :-padx]
+    if pady > 0:
+        fimg = fimg[:-pady]
     return fimg
 
 

@@ -79,5 +79,16 @@ class TestGaussianFilter(unittest.TestCase):
         self.assertTrue(np.allclose(res, np.array(m*[[0, 0.1175031, 0.39346934, 0.67534753]])))
 
 
+class TestFilterStreaks(unittest.TestCase):
+    def test_odd(self):
+        #
+        # Bug - images with odd dimensions did not work because fft got
+        #       padded to even dims
+        #
+        for shape in ((1000, 1001), (1001, 1000), (1001, 1001)):
+            img = np.zeros(shape)
+            result = core.filter_streaks(img, (128, 512), level=0, wavelet="db5", crossover=10)
+            self.assertSequenceEqual(img.shape, result.shape)
+
 if __name__ == '__main__':
     unittest.main()
