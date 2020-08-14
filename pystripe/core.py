@@ -11,7 +11,7 @@ import multiprocessing
 import tqdm
 from dcimg import DCIMGFile
 from pystripe import raw
-
+from .lightsheet_correct import correct_lightsheet
 import warnings
 warnings.filterwarnings("ignore")
 
@@ -483,7 +483,14 @@ def filter_streaks(img, sigma, level=0, wavelet='db3', crossover=10, threshold=-
     return fimg
 
 
-def read_filter_save(input_path, output_path, sigma, level=0, wavelet='db3', crossover=10, threshold=-1, compression=1, flat=None, dark=0, z_idx=None, rotate=False):
+def read_filter_save(input_path, output_path, sigma, level=0, wavelet='db3',
+                     crossover=10, threshold=-1, compression=1,
+                     flat=None, dark=0, z_idx=None, rotate=False,
+                     lightsheet=False,
+                     artifact_length=150,
+                     background_window_size=200,
+                     percentile=.25,
+                     lightsheet_vs_background=2.0):
     """Convenience wrapper around filter streaks. Takes in a path to an image rather than an image array
 
     Note that the directory being written to must already exist before calling this function
@@ -512,6 +519,18 @@ def read_filter_save(input_path, output_path, sigma, level=0, wavelet='db3', cro
         Intensity to subtract from the images for dark offset. Default is 0.
     z_idx : int
         z index of DCIMG slice. Only applicable to DCIMG files.
+    rotate : bool
+        rotate x and y if true
+    lightsheet : bool
+        if False, use wavelet method, if true use correct_lightsheet
+    artifact_length : int
+        # of pixels to look at in the lightsheet direction
+    background_window_size : int
+        Look at this size window around the pixel in x and y
+    percentile : float
+        Take this percentile as background with lightsheet
+    lightsheet_vs_background : float
+        weighting factor to use background or lightsheet background
 
     """
     if z_idx is None:
@@ -523,7 +542,21 @@ def read_filter_save(input_path, output_path, sigma, level=0, wavelet='db3', cro
         img = imread_dcimg(str(input_path), z_idx)
     if rotate:
         img = np.rot90(img)
-    fimg = filter_streaks(img, sigma, level=level, wavelet=wavelet, crossover=crossover, threshold=threshold, flat=flat, dark=dark)
+    if not lightsheet:
+        fimg = filter_streaks(img, sigma, level=level, wavelet=wavelet, crossover=crossover, threshold=threshold, flat=flat, dark=dark)
+    else:
+        fimg = correct_lightsheet(
+            img.reshape(img.shape[0], img.shape[1], 1),
+            percentile=percentile,
+            lightsheet=dict(selem=(1, artifact_length, 1)),
+            background=dict(
+                selem=(background_window_size, background_window_size, 1),
+                spacing=(25, 25, 1),
+                interpolate=1,
+                dtype=np.float32,
+                step=(2, 2, 1)),
+            lightsheet_vs_background=lightsheet_vs_background
+            ).reshape(img.shape[0], img.shape[1])
     # Save image, retry if OSError for NAS
     for _ in range(nb_retry):
         try:
@@ -695,6 +728,11 @@ def _parse_args():
     parser.add_argument("--dark", "-d", help="Intensity of dark offset in flat-field correction", type=float, default=0)
     parser.add_argument("--zstep", "-z", help="Z-step in micron. Only used for DCIMG files.", type=float, default=None)
     parser.add_argument("--rotate", "-r", help="Rotate output images 90 degrees counter-clockwise", action='store_true')
+    parser.add_argument("--lightsheet", help="Use the lightsheet method", action="store_true")
+    parser.add_argument("--artifact-length", help="Look for minimum in lightsheet direction over this length", default=150, type=int)
+    parser.add_argument("--background-window-size", help="Size of window in x and y for background estimation", default=200, type=int)
+    parser.add_argument("--percentile", help="The percentile at which to measure the background", type=float, default=.25)
+    parser.add_argument("--lightsheet-vs-background", help="The background is multiplied by this weight when comparing lightsheet against background", type=float, default=2.0)
     args = parser.parse_args()
     return args
 
@@ -734,7 +772,13 @@ def main():
                          compression=args.compression,
                          flat=flat,
                          dark=args.dark,
-                         rotate=args.rotate)  # Does not work on DCIMG files
+                         rotate=args.rotate,  # Does not work on DCIMG files
+                         lightsheet=args.lightsheet,
+                         artifact_length=args.artifact_length,
+                         background_window_size=args.background_window_size,
+                         percentile=args.percentile,
+                         lightsheet_vs_background=args.lightsheet_vs_background
+                         )
     elif input_path.is_dir():  # batch processing
         if args.output == '':
             output_path = Path(input_path.parent).joinpath(str(input_path)+'_destriped')
@@ -754,7 +798,12 @@ def main():
                      flat=flat,
                      dark=args.dark,
                      zstep=zstep,
-                     rotate=args.rotate)
+                     rotate=args.rotate,
+                     lightsheet=args.lightsheet,
+                     artifact_length=args.artifact_length,
+                     background_window_size=args.background_window_size,
+                     percentile=args.percentile,
+                     lightsheet_vs_background=args.lightsheet_vs_background)
     else:
         print('Cannot find input file or directory. Exiting...')
 
