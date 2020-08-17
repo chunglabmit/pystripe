@@ -625,7 +625,14 @@ def _find_all_images(input_path, zstep=None):
     return img_paths
 
 
-def batch_filter(input_path, output_path, workers, chunks, sigma, level=0, wavelet='db3', crossover=10, threshold=-1, compression=1, flat=None, dark=0, zstep=None, rotate=False):
+def batch_filter(input_path, output_path, workers, chunks, sigma, level=0, wavelet='db3', crossover=10,
+                 threshold=-1, compression=1, flat=None, dark=0, zstep=None, rotate=False,
+                 lightsheet=False,
+                 artifact_length=150,
+                 background_window_size=200,
+                 percentile=.25,
+                 lightsheet_vs_background=2.0
+                 ):
     """Applies `streak_filter` to all images in `input_path` and write the results to `output_path`.
 
     Parameters
@@ -690,6 +697,11 @@ def batch_filter(input_path, output_path, workers, chunks, sigma, level=0, wavel
             'dark': dark,
             'z_idx': z_idx,
             'rotate': rotate,
+            'lightsheet': lightsheet,
+            'artifact_length': artifact_length,
+            'background_window_size': background_window_size,
+            'percentile': percentile,
+            'lightsheet_vs_background': lightsheet_vs_background
         }
         args.append(arg_dict)
     print('Pystripe batch processing progress:')
