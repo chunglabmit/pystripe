@@ -34,11 +34,15 @@ def raw_imread(path):
         width, height = width_be, height_be
         dtype = ">u2"
 
-    return np.memmap(path,
-                     dtype=dtype,
-                     mode="r",
-                     offset=8,
-                     shape=(height, width))
+    try:
+        return np.memmap(path,
+                         dtype=dtype,
+                         mode="r",
+                         offset=8,
+                         shape=(height, width))
+    except:
+        print("Bad path: %s" % path)
+        raise
 
 
 def raw_imsave(path, img):

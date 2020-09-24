@@ -536,10 +536,12 @@ def read_filter_save(input_path, output_path, sigma, level=0, wavelet='db3',
     if z_idx is None:
         # Path must be TIFF or RAW
         img = imread(str(input_path))
+        dtype = img.dtype
     else:
         # Path must be to DCIMG file
         assert str(input_path).endswith('.dcimg')
         img = imread_dcimg(str(input_path), z_idx)
+        dtype = np.uint16
     if rotate:
         img = np.rot90(img)
     if not lightsheet:
@@ -560,7 +562,7 @@ def read_filter_save(input_path, output_path, sigma, level=0, wavelet='db3',
     # Save image, retry if OSError for NAS
     for _ in range(nb_retry):
         try:
-            imsave(str(output_path), fimg, compression=compression)
+            imsave(str(output_path), fimg.astype(dtype), compression=compression)
         except OSError:
             print('Retrying...')
             continue
