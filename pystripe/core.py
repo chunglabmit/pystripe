@@ -559,6 +559,8 @@ def read_filter_save(input_path, output_path, sigma, level=0, wavelet='db3',
                 step=(2, 2, 1)),
             lightsheet_vs_background=lightsheet_vs_background
             ).reshape(img.shape[0], img.shape[1])
+        if flat is not None:
+            fimg = apply_flat(fimg, flat)
     # Save image, retry if OSError for NAS
     for _ in range(nb_retry):
         try:
