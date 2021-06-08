@@ -490,7 +490,9 @@ def read_filter_save(input_path, output_path, sigma, level=0, wavelet='db3',
                      artifact_length=150,
                      background_window_size=200,
                      percentile=.25,
-                     lightsheet_vs_background=2.0):
+                     lightsheet_vs_background=2.0,
+                     dont_convert_16bit=False):
+
     """Convenience wrapper around filter streaks. Takes in a path to an image rather than an image array
 
     Note that the directory being written to must already exist before calling this function
@@ -531,12 +533,15 @@ def read_filter_save(input_path, output_path, sigma, level=0, wavelet='db3',
         Take this percentile as background with lightsheet
     lightsheet_vs_background : float
         weighting factor to use background or lightsheet background
-
+    dont_convert_16bit : bool
+        Flag for converting to 16-bit
     """
     if z_idx is None:
         # Path must be TIFF or RAW
         img = imread(str(input_path))
         dtype = img.dtype
+        if not dont_convert_16bit:
+            dtype = np.uint16
     else:
         # Path must be to DCIMG file
         assert str(input_path).endswith('.dcimg')
@@ -635,7 +640,8 @@ def batch_filter(input_path, output_path, workers, chunks, sigma, level=0, wavel
                  artifact_length=150,
                  background_window_size=200,
                  percentile=.25,
-                 lightsheet_vs_background=2.0
+                 lightsheet_vs_background=2.0,
+                 dont_convert_16bit=False
                  ):
     """Applies `streak_filter` to all images in `input_path` and write the results to `output_path`.
 
@@ -669,7 +675,8 @@ def batch_filter(input_path, output_path, workers, chunks, sigma, level=0, wavel
         Zstep in tenths of micron. only used for DCIMG files.
     rotate : bool
         Flag for 90 degree rotation.
-
+    dont_convert_16bit : bool
+        Flag for converting to 16-bit
     """
     if workers == 0:
         workers = multiprocessing.cpu_count()
@@ -705,7 +712,8 @@ def batch_filter(input_path, output_path, workers, chunks, sigma, level=0, wavel
             'artifact_length': artifact_length,
             'background_window_size': background_window_size,
             'percentile': percentile,
-            'lightsheet_vs_background': lightsheet_vs_background
+            'lightsheet_vs_background': lightsheet_vs_background,
+            'dont_convert_16bit' : dont_convert_16bit
         }
         args.append(arg_dict)
     print('Pystripe batch processing progress:')
@@ -749,6 +757,7 @@ def _parse_args():
     parser.add_argument("--background-window-size", help="Size of window in x and y for background estimation", default=200, type=int)
     parser.add_argument("--percentile", help="The percentile at which to measure the background", type=float, default=.25)
     parser.add_argument("--lightsheet-vs-background", help="The background is multiplied by this weight when comparing lightsheet against background", type=float, default=2.0)
+    parser.add_argument("--dont-convert-16bit", help="Is the output converted to 16-bit .tiff or not", action="store_true")
     args = parser.parse_args()
     return args
 
@@ -793,7 +802,8 @@ def main():
                          artifact_length=args.artifact_length,
                          background_window_size=args.background_window_size,
                          percentile=args.percentile,
-                         lightsheet_vs_background=args.lightsheet_vs_background
+                         lightsheet_vs_background=args.lightsheet_vs_background,
+                         dont_convert_16bit=args.dont_convert_16bit
                          )
     elif input_path.is_dir():  # batch processing
         if args.output == '':
@@ -819,7 +829,9 @@ def main():
                      artifact_length=args.artifact_length,
                      background_window_size=args.background_window_size,
                      percentile=args.percentile,
-                     lightsheet_vs_background=args.lightsheet_vs_background)
+                     lightsheet_vs_background=args.lightsheet_vs_background,
+                     dont_convert_16bit=args.dont_convert_16bit
+                     )
     else:
         print('Cannot find input file or directory. Exiting...')
 
