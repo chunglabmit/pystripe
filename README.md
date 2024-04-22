@@ -4,6 +4,21 @@
 
 An image processing package for removing streaks from SPIM images
 
+Pystripe implements two different destriping algorithms. The first uses
+wavelets to deconvolve along the striping direction. The second uses a
+combination of background estimation from a linear patch in the striping
+direction and a square background patch. It is adapted
+from https://github.com/ChristophKirst/ClearMap2
+
+Kirst, et al. "Mapping the Fine-Scale Organization and Plasticity of the Brain Vasculature." 
+Cell 180.4 (2020): 780-795.
+https://doi.org/10.1016/j.cell.2020.01.028
+
+Renier et al. "Mapping of brain activity by automated volume analysis of immediate early genes."
+Cell 165.7 (2016): 1789-1802.
+https://doi.org/10.1016/j.cell.2016.05.007
+
+
 ```python
 import pystripe
 
@@ -72,6 +87,17 @@ Default is 10.
 * **--workers, -n**: (int, optional) number of cpu workers to use in batch processing. Default is cpu_count()
 * **--chunks**: (int, optional) number of images each worker processes at a time. Default is 1
 * **--compression, -c**: (int, optional) compression level (0-9) for writing tiffs. Default is 1
+* **--lightsheet**: (switch) if present, use the method of Kirst, et. al.
+If absent, use wavelets
+* **--artifact-length**: (int, optional) the length of the lightsheet line that
+is used to estimate the background in the presence of lightsheet streaks
+* **--background-window-size**: (int, optional) the size in x and y of the
+background window to use as an alternate background estimation
+* **--percentile**: (float, optional) the percentile at which to measure
+background
+* **--lightsheet-vs-background**: (float, optional) the weighting factor
+to use when comparing the lightsheet and background estimates. Higher
+favors the background method.
 
 ## Batch script
 

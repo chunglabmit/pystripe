@@ -13,7 +13,7 @@ import time
 from dcimg import DCIMGFile
 from pystripe import raw
 from PIL import Image
-
+from .lightsheet_correct import correct_lightsheet
 import warnings
 warnings.filterwarnings("ignore")
 
@@ -495,7 +495,17 @@ def filter_streaks(img, sigma, level=0, wavelet='db3', crossover=10, threshold=-
     return fimg
 
 
-def read_filter_save(input_path, output_path, sigma, level=0, wavelet='db3', crossover=10, threshold=-1, compression=1, flat=None, dark=0, z_idx=None, rotate=False, bypass=False):
+def read_filter_save(input_path, output_path, sigma, level=0, wavelet='db3',
+                     crossover=10, threshold=-1, compression=1,
+                     flat=None, dark=0, z_idx=None, rotate=False,
+                     lightsheet=False,
+                     artifact_length=150,
+                     background_window_size=200,
+                     percentile=.25,
+                     lightsheet_vs_background=2.0,
+                     dont_convert_16bit=False,
+                     bypass=False):
+
     """Convenience wrapper around filter streaks. Takes in a path to an image rather than an image array
 
     Note that the directory being written to must already exist before calling this function
@@ -525,17 +535,33 @@ def read_filter_save(input_path, output_path, sigma, level=0, wavelet='db3', cro
     z_idx : int
         z index of DCIMG slice. Only applicable to DCIMG files.
     rotate : bool
-        Flag for 90 degree rotation.
+        rotate x and y if true
+    lightsheet : bool
+        if False, use wavelet method, if true use correct_lightsheet
+    artifact_length : int
+        # of pixels to look at in the lightsheet direction
+    background_window_size : int
+        Look at this size window around the pixel in x and y
+    percentile : float
+        Take this percentile as background with lightsheet
+    lightsheet_vs_background : float
+        weighting factor to use background or lightsheet background
+    dont_convert_16bit : bool
+        Flag for converting to 16-bit
     bypass : bool
         Flag for bypassing option
     """
     if z_idx is None:
         # Path must be TIFF or RAW
         img = imread(str(input_path))
+        dtype = img.dtype
+        if not dont_convert_16bit:
+            dtype = np.uint16
     else:
         # Path must be to DCIMG file
         assert str(input_path).endswith('.dcimg')
         img = imread_dcimg(str(input_path), z_idx)
+        dtype = np.uint16
     if rotate:
         img = np.rot90(img)
 
@@ -543,12 +569,27 @@ def read_filter_save(input_path, output_path, sigma, level=0, wavelet='db3', cro
         print("bypassing!!!")
         fimg = np.clip(img, 0, 2**16 - 1)
         fimg = fimg.astype('uint16')
-    else:
+    elif not lightsheet:
         fimg = filter_streaks(img, sigma, level=level, wavelet=wavelet, crossover=crossover, threshold=threshold, flat=flat, dark=dark)
+    else:
+        fimg = correct_lightsheet(
+            img.reshape(img.shape[0], img.shape[1], 1),
+            percentile=percentile,
+            lightsheet=dict(selem=(1, artifact_length, 1)),
+            background=dict(
+                selem=(background_window_size, background_window_size, 1),
+                spacing=(25, 25, 1),
+                interpolate=1,
+                dtype=np.float32,
+                step=(2, 2, 1)),
+            lightsheet_vs_background=lightsheet_vs_background
+            ).reshape(img.shape[0], img.shape[1])
+        if flat is not None:
+            fimg = apply_flat(fimg, flat)
     # Save image, retry if OSError for NAS
     for _ in range(nb_retry):
         try:
-            imsave(str(output_path), fimg, compression=compression)
+            imsave(str(output_path), fimg.astype(dtype), compression=compression)
         except OSError:
             print('Retrying...')
             continue
@@ -614,7 +655,16 @@ def _find_all_images(input_path, zstep=None):
     return img_paths
 
 
-def batch_filter(input_path, output_path, workers, chunks, sigma, level=0, wavelet='db3', crossover=10, threshold=-1, compression=1, flat=None, dark=0, zstep=None, rotate=False, bypass=False):
+def batch_filter(input_path, output_path, workers, chunks, sigma, level=0, wavelet='db3', crossover=10,
+                 threshold=-1, compression=1, flat=None, dark=0, zstep=None, rotate=False,
+                 lightsheet=False,
+                 artifact_length=150,
+                 background_window_size=200,
+                 percentile=.25,
+                 lightsheet_vs_background=2.0,
+                 dont_convert_16bit=False,
+                 bypass=False
+                 ):
     """Applies `streak_filter` to all images in `input_path` and write the results to `output_path`.
 
     Parameters
@@ -647,9 +697,10 @@ def batch_filter(input_path, output_path, workers, chunks, sigma, level=0, wavel
         Zstep in tenths of micron. only used for DCIMG files.
     rotate : bool
         Flag for 90 degree rotation.
+    dont_convert_16bit : bool
+        Flag for converting to 16-bit
     bypass : bool
         Flag for bypassing option
-
     """
     if workers == 0:
         workers = multiprocessing.cpu_count()
@@ -681,6 +732,12 @@ def batch_filter(input_path, output_path, workers, chunks, sigma, level=0, wavel
             'dark': dark,
             'z_idx': z_idx,
             'rotate': rotate,
+            'lightsheet': lightsheet,
+            'artifact_length': artifact_length,
+            'background_window_size': background_window_size,
+            'percentile': percentile,
+            'lightsheet_vs_background': lightsheet_vs_background,
+            'dont_convert_16bit' : dont_convert_16bit
             'bypass': bypass
         }
         args.append(arg_dict)
@@ -720,6 +777,12 @@ def _parse_args():
     parser.add_argument("--dark", "-d", help="Intensity of dark offset in flat-field correction", type=float, default=0)
     parser.add_argument("--zstep", "-z", help="Z-step in micron. Only used for DCIMG files.", type=float, default=None)
     parser.add_argument("--rotate", "-r", help="Rotate output images 90 degrees counter-clockwise", action='store_true')
+    parser.add_argument("--lightsheet", help="Use the lightsheet method", action="store_true")
+    parser.add_argument("--artifact-length", help="Look for minimum in lightsheet direction over this length", default=150, type=int)
+    parser.add_argument("--background-window-size", help="Size of window in x and y for background estimation", default=200, type=int)
+    parser.add_argument("--percentile", help="The percentile at which to measure the background", type=float, default=.25)
+    parser.add_argument("--lightsheet-vs-background", help="The background is multiplied by this weight when comparing lightsheet against background", type=float, default=2.0)
+    parser.add_argument("--dont-convert-16bit", help="Is the output converted to 16-bit .tiff or not", action="store_true")
     parser.add_argument("--bypass", "-b", help="Bypass whole pipeline and directly generate tiff from raw", action='store_true', default=False)
     args = parser.parse_args()
     return args
@@ -761,7 +824,14 @@ def main():
                          flat=flat,
                          dark=args.dark,
                          rotate=args.rotate,  # Does not work on DCIMG files
-                         bypass=args.bypass)
+                         lightsheet=args.lightsheet,
+                         artifact_length=args.artifact_length,
+                         background_window_size=args.background_window_size,
+                         percentile=args.percentile,
+                         lightsheet_vs_background=args.lightsheet_vs_background,
+                         dont_convert_16bit=args.dont_convert_16bit,
+                         bypass=args.bypass
+                         )
     elif input_path.is_dir():  # batch processing
         if args.output == '':
             output_path = Path(input_path.parent).joinpath(str(input_path)+'_destriped')
@@ -782,7 +852,14 @@ def main():
                      dark=args.dark,
                      zstep=zstep,
                      rotate=args.rotate,
-                     bypass=args.bypass)
+                     lightsheet=args.lightsheet,
+                     artifact_length=args.artifact_length,
+                     background_window_size=args.background_window_size,
+                     percentile=args.percentile,
+                     lightsheet_vs_background=args.lightsheet_vs_background,
+                     dont_convert_16bit=args.dont_convert_16bit,
+                     bypass=args.bypass
+                     )
     else:
         print('Cannot find input file or directory. Exiting...')
 
