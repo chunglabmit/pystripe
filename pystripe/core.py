@@ -737,7 +737,7 @@ def batch_filter(input_path, output_path, workers, chunks, sigma, level=0, wavel
             'background_window_size': background_window_size,
             'percentile': percentile,
             'lightsheet_vs_background': lightsheet_vs_background,
-            'dont_convert_16bit' : dont_convert_16bit
+            'dont_convert_16bit' : dont_convert_16bit,
             'bypass': bypass
         }
         args.append(arg_dict)
