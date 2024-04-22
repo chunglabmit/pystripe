@@ -9,14 +9,16 @@ import tifffile
 import pywt
 import multiprocessing
 import tqdm
+import time
 from dcimg import DCIMGFile
 from pystripe import raw
+from PIL import Image
 
 import warnings
 warnings.filterwarnings("ignore")
 
 
-supported_extensions = ['.tif', '.tiff', '.raw', '.dcimg']
+supported_extensions = ['.tif', '.tiff', '.raw', '.dcimg', '.png']
 nb_retry = 10
 
 
@@ -53,10 +55,20 @@ def imread(path):
     """
     img = None
     extension = _get_extension(path)
-    if extension == '.raw':
-        img = raw.raw_imread(path)
-    elif extension == '.tif' or extension == '.tiff':
-        img = tifffile.imread(path)
+    while img is None:
+        try:
+            if extension == '.raw':
+                img = raw.raw_imread(path)
+            elif extension == '.tif' or extension == '.tiff':
+                img = tifffile.imread(path)
+            else: # handle other types (e.g., png)
+                img = np.array(Image.open(path))
+        except:
+            # retry
+            print("File [ %s ] not available...retrying"%path)
+            time.sleep(1)
+
+
     return img
 
 
@@ -483,7 +495,7 @@ def filter_streaks(img, sigma, level=0, wavelet='db3', crossover=10, threshold=-
     return fimg
 
 
-def read_filter_save(input_path, output_path, sigma, level=0, wavelet='db3', crossover=10, threshold=-1, compression=1, flat=None, dark=0, z_idx=None, rotate=False):
+def read_filter_save(input_path, output_path, sigma, level=0, wavelet='db3', crossover=10, threshold=-1, compression=1, flat=None, dark=0, z_idx=None, rotate=False, bypass=False):
     """Convenience wrapper around filter streaks. Takes in a path to an image rather than an image array
 
     Note that the directory being written to must already exist before calling this function
@@ -512,7 +524,10 @@ def read_filter_save(input_path, output_path, sigma, level=0, wavelet='db3', cro
         Intensity to subtract from the images for dark offset. Default is 0.
     z_idx : int
         z index of DCIMG slice. Only applicable to DCIMG files.
-
+    rotate : bool
+        Flag for 90 degree rotation.
+    bypass : bool
+        Flag for bypassing option
     """
     if z_idx is None:
         # Path must be TIFF or RAW
@@ -523,7 +538,13 @@ def read_filter_save(input_path, output_path, sigma, level=0, wavelet='db3', cro
         img = imread_dcimg(str(input_path), z_idx)
     if rotate:
         img = np.rot90(img)
-    fimg = filter_streaks(img, sigma, level=level, wavelet=wavelet, crossover=crossover, threshold=threshold, flat=flat, dark=dark)
+
+    if bypass:
+        print("bypassing!!!")
+        fimg = np.clip(img, 0, 2**16 - 1)
+        fimg = fimg.astype('uint16')
+    else:
+        fimg = filter_streaks(img, sigma, level=level, wavelet=wavelet, crossover=crossover, threshold=threshold, flat=flat, dark=dark)
     # Save image, retry if OSError for NAS
     for _ in range(nb_retry):
         try:
@@ -576,6 +597,7 @@ def _find_all_images(input_path, zstep=None):
     assert input_path.is_dir()
     img_paths = []
     for p in input_path.iterdir():
+        print("p: ", p)
         if p.is_file():
             if p.suffix in supported_extensions:
                 if p.suffix == '.dcimg':
@@ -592,7 +614,7 @@ def _find_all_images(input_path, zstep=None):
     return img_paths
 
 
-def batch_filter(input_path, output_path, workers, chunks, sigma, level=0, wavelet='db3', crossover=10, threshold=-1, compression=1, flat=None, dark=0, zstep=None, rotate=False):
+def batch_filter(input_path, output_path, workers, chunks, sigma, level=0, wavelet='db3', crossover=10, threshold=-1, compression=1, flat=None, dark=0, zstep=None, rotate=False, bypass=False):
     """Applies `streak_filter` to all images in `input_path` and write the results to `output_path`.
 
     Parameters
@@ -625,6 +647,8 @@ def batch_filter(input_path, output_path, workers, chunks, sigma, level=0, wavel
         Zstep in tenths of micron. only used for DCIMG files.
     rotate : bool
         Flag for 90 degree rotation.
+    bypass : bool
+        Flag for bypassing option
 
     """
     if workers == 0:
@@ -657,6 +681,7 @@ def batch_filter(input_path, output_path, workers, chunks, sigma, level=0, wavel
             'dark': dark,
             'z_idx': z_idx,
             'rotate': rotate,
+            'bypass': bypass
         }
         args.append(arg_dict)
     print('Pystripe batch processing progress:')
@@ -695,6 +720,7 @@ def _parse_args():
     parser.add_argument("--dark", "-d", help="Intensity of dark offset in flat-field correction", type=float, default=0)
     parser.add_argument("--zstep", "-z", help="Z-step in micron. Only used for DCIMG files.", type=float, default=None)
     parser.add_argument("--rotate", "-r", help="Rotate output images 90 degrees counter-clockwise", action='store_true')
+    parser.add_argument("--bypass", "-b", help="Bypass whole pipeline and directly generate tiff from raw", action='store_true', default=False)
     args = parser.parse_args()
     return args
 
@@ -734,7 +760,8 @@ def main():
                          compression=args.compression,
                          flat=flat,
                          dark=args.dark,
-                         rotate=args.rotate)  # Does not work on DCIMG files
+                         rotate=args.rotate,  # Does not work on DCIMG files
+                         bypass=args.bypass)
     elif input_path.is_dir():  # batch processing
         if args.output == '':
             output_path = Path(input_path.parent).joinpath(str(input_path)+'_destriped')
@@ -754,7 +781,8 @@ def main():
                      flat=flat,
                      dark=args.dark,
                      zstep=zstep,
-                     rotate=args.rotate)
+                     rotate=args.rotate,
+                     bypass=args.bypass)
     else:
         print('Cannot find input file or directory. Exiting...')
 
