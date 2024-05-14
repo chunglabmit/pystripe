@@ -148,12 +148,12 @@ def imsave(path, img, compression=1):
 
     """
     extension = _get_extension(path)
-    if extension == '.raw':
+    if extension == '.tif' or extension == '.tiff':
+        tifffile.imsave(path, img, compress=compression)
+    else:
         # TODO: get raw writing to work
         # raw.raw_imsave(path, img)
         tifffile.imsave(os.path.splitext(path)[0]+'.tif', img, compress=compression)
-    elif extension == '.tif' or extension == '.tiff':
-        tifffile.imsave(path, img, compress=compression)
 
 
 def wavedec(img, wavelet, level=None):
