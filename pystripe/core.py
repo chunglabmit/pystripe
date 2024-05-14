@@ -566,7 +566,6 @@ def read_filter_save(input_path, output_path, sigma, level=0, wavelet='db3',
         img = np.rot90(img)
 
     if bypass:
-        print("bypassing!!!")
         fimg = np.clip(img, 0, 2**16 - 1)
         fimg = fimg.astype('uint16')
     elif not lightsheet:
@@ -638,7 +637,6 @@ def _find_all_images(input_path, zstep=None):
     assert input_path.is_dir()
     img_paths = []
     for p in input_path.iterdir():
-        print("p: ", p)
         if p.is_file():
             if p.suffix in supported_extensions:
                 if p.suffix == '.dcimg':
