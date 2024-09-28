@@ -333,9 +333,9 @@ def hist_match(source, template):
     # take the cumsum of the counts and normalize by the number of pixels to
     # get the empirical cumulative distribution functions for the source and
     # template images (maps pixel value --> quantile)
-    s_quantiles = np.cumsum(s_counts).astype(np.float64)
+    s_quantiles = np.cumsum(s_counts).astype(float)
     s_quantiles /= s_quantiles[-1]
-    t_quantiles = np.cumsum(t_counts).astype(np.float64)
+    t_quantiles = np.cumsum(t_counts).astype(float)
     t_quantiles /= t_quantiles[-1]
 
     # interpolate linearly to find the pixel values in the template image
@@ -432,7 +432,7 @@ def filter_streaks(img, sigma, level=0, wavelet='db3', crossover=10, threshold=-
         except ValueError:
             threshold = 1
 
-    img = np.array(img, dtype=np.float)
+    img = np.array(img, dtype=float)
     #
     # Need to pad image to multiple of 2
     #
@@ -579,7 +579,7 @@ def read_filter_save(input_path, output_path, sigma, level=0, wavelet='db3',
                 selem=(background_window_size, background_window_size, 1),
                 spacing=(25, 25, 1),
                 interpolate=1,
-                dtype=np.float32,
+                dtype=float,
                 step=(2, 2, 1)),
             lightsheet_vs_background=lightsheet_vs_background
             ).reshape(img.shape[0], img.shape[1])
@@ -746,7 +746,7 @@ def batch_filter(input_path, output_path, workers, chunks, sigma, level=0, wavel
 
 
 def normalize_flat(flat):
-    flat_float = flat.astype(np.float32)
+    flat_float = flat.astype(float)
     return flat_float / flat_float.max()
 
 
